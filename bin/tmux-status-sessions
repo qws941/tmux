@@ -20,6 +20,6 @@ while IFS= read -r line; do
   else
     out+="#[range=session|${sid}]#[fg=#a9b1d6,bg=#292e42] ${session} #[fg=#565f89]${wins}w #[norange]#[default]"
   fi
-done < <(tmux list-sessions -F '#{session_id}:#{session_name}:#{session_windows}' 2>/dev/null | sort)
+done < <(tmux list-sessions -F '#{session_id}:#{session_name}:#{session_windows}' 2>/dev/null)
 
 printf '%s' "$out"

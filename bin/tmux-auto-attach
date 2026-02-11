@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
-# tmux-auto-attach — SSH 접속시 자동 세션 연결
+# tmux-auto-attach — SSH/mosh 접속시 자동 세션 연결
 # Usage: Add to ~/.bashrc:
-#   [[ -n "$SSH_CONNECTION" && -z "$TMUX" ]] && ~/.tmux/bin/tmux-auto-attach
+#   [[ (-n "$SSH_CONNECTION" || -n "${MOSH_KEY:-}") && -z "$TMUX" ]] && ~/.tmux/bin/tmux-auto-attach
 
 set -euo pipefail
 
 # Already inside tmux? Skip.
 [[ -n "${TMUX:-}" ]] && exit 0
+
+# Only run on remote connections (SSH or mosh)
+if [[ -z "${SSH_CONNECTION:-}" && -z "${MOSH_KEY:-}" ]]; then
+  exit 0
+fi
 
 # Try attaching to existing session first
 if tmux attach 2>/dev/null; then

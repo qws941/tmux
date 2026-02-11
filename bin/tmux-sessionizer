@@ -166,7 +166,7 @@ if [[ $# -eq 1 ]]; then
   selected="$1"
 else
   # Build items: create option + active sessions + ~/dev dirs
-  active_sessions=$(tmux list-sessions -F '#{session_last_attached} #{session_name}' 2>/dev/null | sort -rn | awk '{print $2}' || true)
+  active_sessions=$(tmux list-sessions -F '#{session_name}' 2>/dev/null || true)
   items="➕ Create New Session"$'\n'
 
   # Active sessions (marked ●)

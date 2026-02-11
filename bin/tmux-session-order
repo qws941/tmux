@@ -3,6 +3,4 @@
 # Simple flat list, no tiers. Used by session-jump and session-cycle.
 set -uo pipefail
 
-tmux list-sessions -F '#{session_activity}|#{session_name}' 2>/dev/null \
-    | sort -t'|' -k1,1 -rn \
-    | cut -d'|' -f2
+tmux list-sessions -F '#{session_name}' 2>/dev/null
