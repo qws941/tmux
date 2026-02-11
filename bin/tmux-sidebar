@@ -141,7 +141,7 @@ cleanup() {
 # Draw a horizontal line
 draw_line() {
     local width=$1
-    local char="${2:-─}"
+    local char="${2:--}"
     local line=""
     for ((i = 0; i < width; i++)); do
         line+="$char"
@@ -149,12 +149,19 @@ draw_line() {
     echo -ne "${C_BORDER}${line}${C_RESET}"
 }
 
-# Truncate string to width
+# Truncate string to display width (CJK-aware)
 truncate() {
     local str="$1"
     local max="$2"
-    if [[ ${#str} -gt $max ]]; then
-        echo "${str:0:$((max - 1))}…"
+    local dw
+    dw=$(printf '%s' "$str" | wc -L)
+    if [[ $dw -gt $max ]]; then
+        # Remove chars from end until display width fits
+        local s="$str"
+        while [[ $(printf '%s' "$s" | wc -L) -gt $((max - 1)) && -n "$s" ]]; do
+            s="${s%?}"
+        done
+        echo "${s}.."
     else
         echo "$str"
     fi
@@ -171,11 +178,11 @@ render_session() {
     local bg=""
 
     if [[ "$is_current" == "1" ]]; then
-        indicator="▸"
+        indicator=">"
         color="$C_ACTIVE"
         bg="$C_ACTIVE_BG"
     elif [[ "$attached" -gt 0 ]]; then
-        indicator="●"
+        indicator="*"
         color="$C_GREEN"
     fi
 
@@ -271,7 +278,7 @@ render() {
         echo ""
 
         # Line 1: env · agent
-        printf " ${C_CYAN}▸ ${C_YELLOW}%s${C_RESET}" "${oc_lines[0]}"
+        printf " ${C_CYAN}> ${C_YELLOW}%s${C_RESET}" "${oc_lines[0]}"
         tput el 2>/dev/null
         echo ""
 

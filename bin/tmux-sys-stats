@@ -10,4 +10,4 @@ cpu=$(awk "BEGIN {printf \"%.0f\", $load / $ncpu * 100}")
 # MEM: used percentage from /proc/meminfo
 mem=$(awk '/^MemTotal:/{t=$2} /^MemAvailable:/{a=$2} END{printf "%.0f", (t-a)/t*100}' /proc/meminfo 2>/dev/null || echo "?")
 
-echo "⚙${cpu}%▪${mem}%"
+echo "${cpu}%/${mem}%"

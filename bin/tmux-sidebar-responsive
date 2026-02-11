@@ -5,7 +5,7 @@
 set -uo pipefail
 
 # Debounce: skip if another instance ran within last 500ms
-LOCK="/tmp/.tmux-sidebar-responsive-$$-lock"
+LOCK="/tmp/.tmux-sidebar-responsive-lock"
 LAST_RUN="/tmp/.tmux-sidebar-responsive-last"
 if [[ -f "$LAST_RUN" ]]; then
     last=$(cat "$LAST_RUN" 2>/dev/null || echo 0)

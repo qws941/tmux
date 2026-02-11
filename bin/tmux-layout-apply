@@ -11,6 +11,9 @@ LAYOUT_DIR="${HOME}/.tmux/layouts"
 session="${1:?Usage: tmux-layout-apply <session> [workdir]}"
 workdir="${2:-.}"
 
+# Respect tmux base-index (default 0, commonly set to 1)
+base_index=$(tmux show-option -gv base-index 2>/dev/null || echo 0)
+
 # Skip if session already has multiple windows (layout already applied)
 current_windows=$(tmux list-windows -t "$session" 2>/dev/null | wc -l)
 if [[ "$current_windows" -gt 1 ]]; then
@@ -35,7 +38,7 @@ for ((w = 0; w < num_windows; w++)); do
 
   if [[ $w -eq 0 ]]; then
     # Rename the default window (created with session)
-    tmux rename-window -t "${session}:0" "$win_name"
+    tmux rename-window -t "${session}:${base_index}" "$win_name"
   else
     # Create additional windows
     tmux new-window -t "${session}" -n "$win_name" -c "$workdir"
@@ -61,5 +64,5 @@ for ((w = 0; w < num_windows; w++)); do
 done
 
 # Focus first window, first pane
-tmux select-window -t "${session}:0"
-tmux select-pane -t "${session}:0.0"
+tmux select-window -t "${session}:${base_index}"
+tmux select-pane -t "${session}:${base_index}.0"
