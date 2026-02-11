@@ -201,24 +201,18 @@ else
              --bind 'ctrl-r:refresh-preview' \
              --bind "focus:execute-silent(echo {} | grep -q '^● ' && tmux switch-client -t \"\$(echo {} | sed 's/^● //')\" 2>/dev/null || true)" \
              --preview='
-               item={}
-               if [[ "$item" == "➕"* ]]; then
-                 echo -e "\033[1;35m➕ Create New Session\033[0m"
-                 echo -e "\033[90m$(printf "%.0s─" {1..40})\033[0m"
-                 echo -e "\033[37mStep 1: Pick directory\033[0m"
-                 echo -e "\033[37mStep 2: Pick layout\033[0m"
-                 echo -e "\033[37mStep 3: Name session\033[0m"
-                 echo ""
-                 echo -e "\033[90mPress ENTER to start wizard\033[0m"
-               elif [[ "$item" == "● "* ]]; then
-                 name="${item#● }"
-                 wins=$(tmux list-windows -t "$name" -F "#{window_name}" 2>/dev/null | paste -sd ", " -)
-                 created=$(tmux display-message -t "$name" -p "#{t:session_created}" 2>/dev/null)
-                 echo -e "\033[1;32m● ${name}\033[0m  \033[90m[${wins}]  ${created}\033[0m"
-                 echo -e "\033[90m$(printf "%.0s─" {1..50})\033[0m"
-                 mapfile -t panes < <(tmux list-panes -t "$name" -F "#{pane_index} #{pane_active}" 2>/dev/null)
-                 if [[ "${#panes[@]}" -le 1 ]]; then
-                   tmux capture-pane -t "$name" -p -e 2>/dev/null || echo -e "\033[90m(no active pane)\033[0m"
+                item={}
+                if [[ "$item" == "➕"* ]]; then
+                  echo -e "\033[1;35m➕ New Session\033[0m"
+                  echo -e "\033[37mdir → layout → name\033[0m"
+                elif [[ "$item" == "● "* ]]; then
+                  name="${item#● }"
+                  wins=$(tmux list-windows -t "$name" -F "#{window_name}" 2>/dev/null | paste -sd ", " -)
+                  created=$(tmux display-message -t "$name" -p "#{t:session_created}" 2>/dev/null)
+                  echo -e "\033[1;32m● ${name}\033[0m  \033[90m[${wins}]  ${created}\033[0m"
+                  mapfile -t panes < <(tmux list-panes -t "$name" -F "#{pane_index} #{pane_active}" 2>/dev/null)
+                  if [[ "${#panes[@]}" -le 1 ]]; then
+                    tmux capture-pane -t "$name" -p -e 2>/dev/null || echo -e "\033[90m(no active pane)\033[0m"
                  else
                    window=$(tmux display-message -t "$name" -p "#{window_index}" 2>/dev/null || echo 0)
                    for pane_row in "${panes[@]}"; do
@@ -228,13 +222,12 @@ else
                      tmux capture-pane -t "$name:${window}.${pane}" -p -e 2>/dev/null | tail -15
                    done
                  fi
-               else
-                 dir="${item#  }"
-                 echo -e "\033[1;33m○ new session\033[0m  ($(basename "$dir" | tr "." "_"))"
-                 echo -e "\033[90m$(printf "%.0s─" {1..50})\033[0m"
-                 ls -1 --color=always "$dir" 2>/dev/null | head -30
-               fi
-             ' --preview-window="${_preview_pos}"
+                else
+                  dir="${item#  }"
+                  echo -e "\033[1;33m○ new session\033[0m  ($(basename "$dir" | tr "." "_"))"
+                  ls -1 --color=always "$dir" 2>/dev/null | head -30
+                fi
+              ' --preview-window="${_preview_pos}"
   ) || { tmux switch-client -t "${_orig_session}" 2>/dev/null; exit 0; }
 fi
 

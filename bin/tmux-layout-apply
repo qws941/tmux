@@ -11,6 +11,12 @@ LAYOUT_DIR="${HOME}/.tmux/layouts"
 session="${1:?Usage: tmux-layout-apply <session> [workdir]}"
 workdir="${2:-.}"
 
+# Skip if session already has multiple windows (layout already applied)
+current_windows=$(tmux list-windows -t "$session" 2>/dev/null | wc -l)
+if [[ "$current_windows" -gt 1 ]]; then
+  exit 0
+fi
+
 # Require yq
 command -v yq &>/dev/null || exit 0
 

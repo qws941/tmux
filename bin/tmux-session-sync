@@ -8,6 +8,7 @@ set -uo pipefail
 TMUX_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LAYOUT_DIR="$TMUX_DIR/layouts"
 SIDEBAR_INIT="$TMUX_DIR/bin/tmux-sidebar-init"
+LAYOUT_APPLY="$TMUX_DIR/bin/tmux-layout-apply"
 
 # Source config for scan paths
 CONFIG_FILE="$TMUX_DIR/sessionizer.conf"
@@ -24,6 +25,9 @@ for arg in "$@"; do
         --clean)   CLEAN=true ;;
     esac
 done
+
+HAS_YQ=false
+command -v yq >/dev/null 2>&1 && HAS_YQ=true
 
 # Colors
 GREEN='\033[0;32m'
@@ -58,7 +62,7 @@ for dir in "$SCAN_DIR"/*/; do
     fi
 
     if $DRY_RUN; then
-        echo -e "${GREEN}+${NC} $name ${DIM}($dir)${NC}${layout:+ ${YELLOW}← ${layout##*/}${NC}}"
+        echo "+ $name ($dir)${layout:+ <- ${layout##*/}}"
         ((created++))
         continue
     fi
@@ -66,13 +70,9 @@ for dir in "$SCAN_DIR"/*/; do
     # Create session
     tmux new-session -d -s "$name" -c "$dir" 2>/dev/null || continue
 
-    # Apply layout if exists
-    if [[ -n "$layout" ]]; then
-        # Parse layout YAML and apply (simplified: run commands from layout)
-        while IFS= read -r cmd; do
-            [[ -z "$cmd" || "$cmd" == "#"* ]] && continue
-            eval "$cmd" 2>/dev/null || true
-        done < <(grep -E '^\s+- ' "$layout" 2>/dev/null | sed 's/^\s*- //')
+    # Apply layout if available and yq is installed
+    if [[ -n "$layout" && "$HAS_YQ" == true && -x "$LAYOUT_APPLY" ]]; then
+        "$LAYOUT_APPLY" "$name" "$dir"
     fi
 
     # Init sidebar
@@ -93,7 +93,7 @@ for dir in "${EXTRA_DIRS[@]}"; do
         continue
     fi
     if $DRY_RUN; then
-        echo -e "${GREEN}+${NC} $name ${DIM}($dir)${NC}"
+        echo "+ $name ($dir)"
         ((created++))
         continue
     fi
@@ -119,7 +119,7 @@ if $CLEAN; then
 
         if ! $dir_exists; then
             if $DRY_RUN; then
-                echo -e "${RED}-${NC} $session ${DIM}(dir missing)${NC}"
+                echo "- $session (dir missing)"
             else
                 tmux kill-session -t "=$session" 2>/dev/null
                 echo -e "${RED}-${NC} $session"
@@ -130,6 +130,8 @@ if $CLEAN; then
 fi
 
 # ── Summary ──
-prefix=""
-$DRY_RUN && prefix="${YELLOW}[dry-run]${NC} "
-echo -e "\n${prefix}${GREEN}${created}${NC} created, ${DIM}${skipped}${NC} skipped${CLEAN:+, ${RED}${cleaned}${NC} cleaned}"
+if $CLEAN; then
+    echo "${created} created, ${skipped} skipped, ${cleaned} cleaned"
+else
+    echo "${created} created, ${skipped} skipped"
+fi
