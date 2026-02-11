@@ -18,8 +18,5 @@ if tmux attach 2>/dev/null; then
     exit 0
 fi
 
-# No session exists — create 'main' with layout + sidebar
-tmux new-session -ds main
-~/.tmux/bin/tmux-layout-apply main "$HOME" 2>/dev/null || true
-~/.tmux/bin/tmux-sidebar-init main 2>/dev/null || true
-exec tmux attach -t main
+# No session exists — launch sessionizer to pick/create session
+exec ~/.tmux/bin/tmux-sessionizer

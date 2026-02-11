@@ -4,7 +4,7 @@
 # Tokyo Night color scheme
 #
 # Sort: attached sessions first, then unattached (alphabetical within each)
-# Highlight: ▸ = current (blue bg), ● = attached (green), dim = inactive
+# Highlight: > = current (blue bg stripe), * = attached (green), dim = inactive
 
 set -euo pipefail
 
@@ -13,8 +13,8 @@ readonly C_RESET='\033[0m'
 readonly C_BG='\033[48;2;31;35;53m'       # #1f2335 storm bg
 readonly C_FG='\033[38;2;169;177;214m'     # #a9b1d6
 readonly C_ACCENT='\033[38;2;61;89;161m'   # #3d59a1 storm accent
-readonly C_ACTIVE='\033[1;38;2;61;89;161m' # #3d59a1 bold
-readonly C_ACTIVE_BG='\033[48;2;31;35;53m'   # #1f2335 storm bg
+readonly C_ACTIVE='\033[1;38;2;192;202;245m' # #c0caf5 bright fg (bold)
+readonly C_ACTIVE_BG='\033[48;2;41;46;66m'   # #292e42 storm visual bg (visible stripe)
 readonly C_DIM='\033[38;2;59;66;97m'       # #3b4261 storm dim
 readonly C_IDLE='\033[38;2;42;48;73m'      # #2a3049 storm idle
 readonly C_GREEN='\033[38;2;115;218;202m'  # #73daca storm teal
@@ -51,7 +51,7 @@ get_oc_status() {
         cost=$(echo "$header_line" | grep -oP '\$[\d.]+')
     fi
 
-    # Parse agent line: "▣  Sisyphus · claude-opus-4.6"
+    # Parse agent line: "▣  Sisyphus - claude-opus-4.6"
     local agent=""
     local agent_line
     agent_line=$(echo "$tui_output" | grep '▣' | tail -1)
@@ -95,11 +95,11 @@ get_oc_status() {
         [[ -n "$tok_fmt" ]] && echo "${tok_fmt} ${pct}%"
     else
         local line1="${env_name}"
-        [[ -n "$agent" && "$agent" != "" ]] && line1="${env_name} · ${agent}"
+        [[ -n "$agent" && "$agent" != "" ]] && line1="${env_name} - ${agent}"
         echo "$line1"
         if [[ -n "$tok_fmt" ]]; then
-            local line2="${tok_fmt} tok · ${pct}%"
-            [[ -n "$cost" ]] && line2="${line2} · ${cost}"
+            local line2="${tok_fmt} tok - ${pct}%"
+            [[ -n "$cost" ]] && line2="${line2} - ${cost}"
             echo "$line2"
         fi
     fi
@@ -187,22 +187,38 @@ render_session() {
     fi
 
     local display_name
-    local num_prefix="${C_DIM}${idx}${C_RESET}"
     if [[ "$is_narrow" == "1" ]]; then
         display_name=$(truncate "$name" $((inner - 4)))
-        printf " ${bg}${num_prefix}${color}%s%s${C_RESET}" "$indicator" "$display_name"
-        tput el 2>/dev/null
-        echo ""
+        local content=" ${idx}${indicator}${display_name}"
+        local pad=$((width - ${#content}))
+        [[ $pad -lt 0 ]] && pad=0
+        if [[ -n "$bg" ]]; then
+            printf " ${bg}${C_DIM}${idx}${C_RESET}${bg}${color}%s%s%*s${C_RESET}\n" "$indicator" "$display_name" "$pad" ""
+        else
+            printf " ${C_DIM}${idx}${C_RESET}${color}%s%s${C_RESET}" "$indicator" "$display_name"
+            tput el 2>/dev/null
+            echo ""
+        fi
     else
         display_name=$(truncate "$name" $((inner - 5)))
+        local badge_text=""
         local badge=""
         if [[ "$windows" -gt 1 ]]; then
-            badge="${C_DIM}[${windows}]${C_RESET}"
+            badge_text="[${windows}]"
+            badge="${C_DIM}${badge_text}${C_RESET}"
         fi
-        printf " ${bg}${num_prefix}${color}%s%-*s${C_RESET} %b" \
-            "$indicator" $((inner - 7)) "$display_name" "$badge"
-        tput el 2>/dev/null
-        echo ""
+        if [[ -n "$bg" ]]; then
+            local content=" ${idx}${indicator}${display_name} ${badge_text}"
+            local pad=$((width - ${#content}))
+            [[ $pad -lt 0 ]] && pad=0
+            printf " ${bg}${C_DIM}${idx}${C_RESET}${bg}${color}%s%-*s${C_RESET}${bg} %b%*s${C_RESET}\n" \
+                "$indicator" $((inner - 7)) "$display_name" "$badge" "$pad" ""
+        else
+            printf " ${C_DIM}${idx}${C_RESET}${color}%s%-*s${C_RESET} %b" \
+                "$indicator" $((inner - 7)) "$display_name" "$badge"
+            tput el 2>/dev/null
+            echo ""
+        fi
     fi
 }
 
@@ -277,12 +293,12 @@ render() {
         draw_line "$inner"
         echo ""
 
-        # Line 1: env · agent
+        # Line 1: env - agent
         printf " ${C_CYAN}> ${C_YELLOW}%s${C_RESET}" "${oc_lines[0]}"
         tput el 2>/dev/null
         echo ""
 
-        # Line 2: tokens · pct · cost (if present)
+        # Line 2: tokens - pct - cost (if present)
         if [[ ${#oc_lines[@]} -gt 1 ]]; then
             printf " ${C_DIM}%s${C_RESET}" "${oc_lines[1]}"
             tput el 2>/dev/null
