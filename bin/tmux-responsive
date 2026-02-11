@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# tmux-responsive — hook-based responsive statusbar
+# Triggered by client-resized hook (NOT every status-interval)
+# This eliminates jitter: runs only on actual terminal resize events.
+#
+# Tiers:
+#   >=80 cols  → Normal:  full git + sys-stats + prefix + time
+#   40-79 cols → Compact: session + prefix + time (Galaxy Fold inner)
+#   <40 cols   → Minimal: session + time only (Galaxy Fold outer)
+
+width=$(tmux display-message -p '#{client_width}')
+
+if [ "$width" -lt 40 ]; then
+    # ── Minimal (Galaxy Fold outer ~25 cols) ──
+    tmux set -gq status-left-length 10
+    tmux set -gq status-right-length 8
+    tmux set -gq status-left ' #S '
+    tmux set -gq status-right ' %H:%M '
+    tmux setw -gq window-status-format ' #I '
+    tmux setw -gq window-status-current-format '>#I '
+
+elif [ "$width" -lt 80 ]; then
+    # ── Compact (Galaxy Fold inner ~60 cols) ──
+    tmux set -gq status-left-length 15
+    tmux set -gq status-right-length 20
+    tmux set -gq status-left '#[fg=#7aa2f7,bold] #S #[fg=#565f89]| '
+    tmux set -gq status-right '#{?client_prefix,#[fg=#bb9af7]P ,}#[fg=#a9b1d6]%H:%M '
+    tmux setw -gq window-status-format '#[fg=#565f89] #I '
+    tmux setw -gq window-status-current-format '#[fg=#7aa2f7,bold]>#I '
+
+else
+    # ── Normal (desktop >=80 cols) ──
+    tmux set -gq status-left-length 30
+    tmux set -gq status-right-length 80
+    tmux set -gq status-left '#[fg=#7aa2f7,bold] #S #[fg=#565f89]| '
+    tmux set -gq status-right '#[fg=#9ece6a]#(~/.tmux/bin/tmux-git-status) #[fg=#565f89]#{?client_prefix,#[fg=#bb9af7]P ,}#{?pane_input_off,#[fg=#f7768e]*,} #[fg=#565f89]| #[fg=#7dcfff]#(~/.tmux/bin/tmux-sys-stats) #[fg=#565f89]| #[fg=#a9b1d6]%H:%M '
+    tmux setw -gq window-status-format '#[fg=#565f89] #I '
+    tmux setw -gq window-status-current-format '#[fg=#7aa2f7,bold]>#I '
+fi
