@@ -1,8 +1,20 @@
 #!/usr/bin/env bash
 # tmux-sidebar-responsive — auto-hide/show/resize sidebar based on terminal width
-# Called by client-resized hook
+# Called by client-resized hook (debounced via lockfile)
 
 set -uo pipefail
+
+# Debounce: skip if another instance ran within last 500ms
+LOCK="/tmp/.tmux-sidebar-responsive-$$-lock"
+LAST_RUN="/tmp/.tmux-sidebar-responsive-last"
+if [[ -f "$LAST_RUN" ]]; then
+    last=$(cat "$LAST_RUN" 2>/dev/null || echo 0)
+    now=$(date +%s%N 2>/dev/null | cut -b1-13 || date +%s)
+    if (( now - last < 500 )); then
+        exit 0
+    fi
+fi
+date +%s%N 2>/dev/null | cut -b1-13 > "$LAST_RUN" || date +%s > "$LAST_RUN"
 
 # Thresholds (tuned for Galaxy Fold inner ~60 cols)
 HIDE_BELOW=60        # hide sidebar entirely on very narrow
