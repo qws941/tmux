@@ -1,0 +1,73 @@
+#!/bin/bash
+# =============================================================================
+# OpenCode: GitHub Copilot environment
+# =============================================================================
+# No args:   switch config to github-copilot/claude-* models
+# With args: attach to oc-co tmux session targeting project dir
+#   Usage: co <project>   e.g. co safework2
+# =============================================================================
+
+set -e
+
+OPENCODE_CONFIG_DIR="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
+BIN_DIR="$OPENCODE_CONFIG_DIR/bin"
+ENV_NAME="co"
+PORT=3003
+
+GREEN='\033[0;32m'
+CYAN='\033[0;36m'
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+switch_config() {
+    local config_file="$OPENCODE_CONFIG_DIR/oh-my-opencode.jsonc"
+    local profile_file="$OPENCODE_CONFIG_DIR/oh-my-opencode.json.$ENV_NAME"
+    local current_profile_file="$OPENCODE_CONFIG_DIR/.current-profile"
+
+    if [[ ! -f "$profile_file" ]]; then
+        echo -e "${RED}Error:${NC} Profile file not found: $profile_file"
+        exit 1
+    fi
+
+    [[ -f "$config_file" ]] && cp "$config_file" "$config_file.bak"
+    cp "$profile_file" "$config_file"
+    echo "$ENV_NAME" > "$current_profile_file"
+
+    echo -e "${GREEN}✓${NC} Switched to ${CYAN}$ENV_NAME${NC} profile"
+    echo -e "  → github-copilot/claude-* models"
+}
+
+attach_session() {
+    local project="$1"
+    local project_dir="$HOME/dev/$project"
+
+    if [[ ! -d "$project_dir" ]]; then
+        echo -e "${RED}Error:${NC} Project not found: $project_dir"
+        echo -e "Available projects:"
+        ls -1 "$HOME/dev/" 2>/dev/null | sed 's/^/  /'
+        exit 1
+    fi
+
+    # Ensure tmux session is running
+    if ! tmux has-session -t "oc-$ENV_NAME" 2>/dev/null; then
+        echo -e "${YELLOW}Starting oc-$ENV_NAME...${NC}"
+        "$BIN_DIR/oc" start "$ENV_NAME"
+        sleep 2
+    fi
+
+    local opencode_bin="$HOME/.opencode/bin/opencode"
+    if [[ ! -x "$opencode_bin" ]]; then
+        echo -e "${RED}Error:${NC} opencode not found at $opencode_bin"
+        exit 1
+    fi
+
+    echo -e "${GREEN}✓${NC} Attaching to ${CYAN}oc-$ENV_NAME${NC} → ${CYAN}$project${NC}"
+    exec "$opencode_bin" attach "http://127.0.0.1:$PORT" --dir "$project_dir"
+}
+
+if [[ $# -eq 0 ]]; then
+    switch_config
+else
+    attach_session "$1"
+fi

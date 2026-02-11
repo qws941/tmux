@@ -1,0 +1,272 @@
+#!/bin/bash
+# =============================================================================
+# oc — OpenCode tmux-based environment manager
+# =============================================================================
+# Usage:
+#   oc start [co|claude|anti|all]    Start opencode serve in tmux
+#   oc stop  [co|claude|anti|all]    Stop tmux session
+#   oc restart [co|claude|anti|all]  Restart
+#   oc status                        Show all instances
+#   oc logs [co|claude|anti]         Attach to tmux session (Ctrl-b d to detach)
+#   oc switch <env>                  Switch config + restart that env
+#
+# Shortcut: co <project>, claude <project>, anti <project>
+#   → attaches to the env's opencode serve via opencode attach
+# =============================================================================
+
+set -euo pipefail
+
+# --- Config ---
+OPENCODE_BIN="/home/jclee/.opencode/bin/opencode"
+OPENCODE_CONFIG_DIR="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
+OPENCODE_SERVER_PASSWORD="LEqzONO4m8Ba13Gr8ZtJJxjIxT26w1dW"
+BIN_DIR="$OPENCODE_CONFIG_DIR/bin"
+
+# NVM/Node setup (opencode needs node in PATH)
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+
+declare -A PORTS=( [anti]=3001 [claude]=3002 [co]=3003 )
+declare -A XDG_PREFIX=( [anti]=opencode-wt-anti [claude]=opencode-wt-claude [co]=opencode-wt-copilot )
+ENVS=(anti claude co)
+
+# Colors
+GREEN='\033[0;32m'
+CYAN='\033[0;36m'
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+DIM='\033[2m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+# --- Helpers ---
+tmux_session_name() { echo "oc-$1"; }
+
+is_running() {
+    tmux has-session -t "$(tmux_session_name "$1")" 2>/dev/null
+}
+
+get_xdg_env() {
+    local env="$1"
+    local prefix="${XDG_PREFIX[$env]}"
+    cat <<EOF
+XDG_CONFIG_HOME=$HOME/.config/$prefix
+XDG_DATA_HOME=$HOME/.local/share/$prefix
+XDG_CACHE_HOME=$HOME/.cache/$prefix
+XDG_STATE_HOME=$HOME/.local/state/$prefix
+OPENCODE_PORT=${PORTS[$env]}
+OPENCODE_SERVER_PASSWORD=$OPENCODE_SERVER_PASSWORD
+EOF
+}
+
+ensure_xdg_dirs() {
+    local env="$1"
+    local prefix="${XDG_PREFIX[$env]}"
+    mkdir -p "$HOME/.config/$prefix" \
+             "$HOME/.local/share/$prefix" \
+             "$HOME/.cache/$prefix" \
+             "$HOME/.local/state/$prefix"
+
+    # Sync oh-my-opencode config to env-specific config dir
+    local src="$OPENCODE_CONFIG_DIR/oh-my-opencode.json.$env"
+    local dst="$HOME/.config/$prefix/oh-my-opencode.jsonc"
+    if [[ -f "$src" ]]; then
+        cp "$src" "$dst"
+    fi
+
+    # Sync opencode.jsonc (main config) if not present
+    local main_cfg="$OPENCODE_CONFIG_DIR/opencode.jsonc"
+    local dst_main="$HOME/.config/$prefix/opencode.jsonc"
+    if [[ -f "$main_cfg" && ! -f "$dst_main" ]]; then
+        cp "$main_cfg" "$dst_main"
+    fi
+}
+
+# --- Commands ---
+cmd_start() {
+    local env="$1"
+    local session
+    session="$(tmux_session_name "$env")"
+
+    if is_running "$env"; then
+        echo -e "${YELLOW}⚠${NC}  ${CYAN}$env${NC} already running (session: $session)"
+        return 0
+    fi
+
+    ensure_xdg_dirs "$env"
+
+    # Build env string for tmux
+    local env_vars
+    env_vars=$(get_xdg_env "$env")
+
+    # Create tmux session with env vars
+    tmux new-session -d -s "$session" \
+        "$(echo "$env_vars" | tr '\n' ' ') \
+        PATH=\"$HOME/.nvm/versions/node/v22.22.0/bin:\$PATH\" \
+        $OPENCODE_BIN serve --port ${PORTS[$env]} --hostname 127.0.0.1; \
+        echo 'Process exited. Press Enter to close.'; read"
+
+    # Brief wait and verify
+    sleep 1
+    if is_running "$env"; then
+        echo -e "${GREEN}✓${NC}  ${CYAN}$env${NC} started on port ${PORTS[$env]} (session: $session)"
+    else
+        echo -e "${RED}✗${NC}  ${CYAN}$env${NC} failed to start"
+        return 1
+    fi
+}
+
+cmd_stop() {
+    local env="$1"
+    local session
+    session="$(tmux_session_name "$env")"
+
+    if ! is_running "$env"; then
+        echo -e "${DIM}·${NC}  ${CYAN}$env${NC} not running"
+        return 0
+    fi
+
+    tmux kill-session -t "$session"
+    echo -e "${GREEN}✓${NC}  ${CYAN}$env${NC} stopped"
+}
+
+cmd_restart() {
+    local env="$1"
+    cmd_stop "$env"
+    sleep 1
+    cmd_start "$env"
+}
+
+cmd_status() {
+    echo -e "${BOLD}OpenCode Instances${NC}"
+    echo -e "${DIM}─────────────────────────────────────────${NC}"
+
+    local current_profile
+    current_profile=$(cat "$OPENCODE_CONFIG_DIR/.current-profile" 2>/dev/null || echo "unknown")
+
+    for env in "${ENVS[@]}"; do
+        local session port status_icon status_text pid_info
+        session="$(tmux_session_name "$env")"
+        port="${PORTS[$env]}"
+
+        if is_running "$env"; then
+            status_icon="${GREEN}●${NC}"
+            status_text="running"
+            # Try to get PID
+            pid_info=$(lsof -ti "tcp:$port" 2>/dev/null | head -1)
+            [[ -n "$pid_info" ]] && status_text="running (pid:$pid_info)"
+        else
+            status_icon="${RED}○${NC}"
+            status_text="stopped"
+        fi
+
+        local active_marker=""
+        [[ "$env" == "$current_profile" ]] && active_marker=" ${YELLOW}★${NC}"
+
+        printf "  %b  %-8s  :%s  %-24s  %s%b\n" \
+            "$status_icon" "$env" "$port" "$status_text" "$session" "$active_marker"
+    done
+
+    echo ""
+    echo -e "${DIM}Active profile: ${NC}${CYAN}$current_profile${NC}"
+    echo -e "${DIM}★ = current shared config${NC}"
+}
+
+cmd_logs() {
+    local env="$1"
+    local session
+    session="$(tmux_session_name "$env")"
+
+    if ! is_running "$env"; then
+        echo -e "${RED}Error:${NC} $env is not running"
+        return 1
+    fi
+
+    echo -e "${DIM}Attaching to $session... (Ctrl-b d to detach)${NC}"
+    tmux attach-session -t "$session"
+}
+
+cmd_switch() {
+    local env="$1"
+
+    # Run the env-specific config switcher
+    if [[ -x "$BIN_DIR/$env" ]]; then
+        "$BIN_DIR/$env"
+    else
+        echo -e "${RED}Error:${NC} No switcher script for '$env'"
+        return 1
+    fi
+
+    # Restart if running
+    if is_running "$env"; then
+        echo -e "${DIM}Restarting $env...${NC}"
+        cmd_restart "$env"
+    fi
+}
+
+# --- Dispatch ---
+usage() {
+    echo "Usage: oc <command> [env]"
+    echo ""
+    echo "Commands:"
+    echo "  start   [co|claude|anti|all]  Start opencode serve in tmux"
+    echo "  stop    [co|claude|anti|all]  Stop tmux session"
+    echo "  restart [co|claude|anti|all]  Stop + start"
+    echo "  status                        Show all instances"
+    echo "  logs    [co|claude|anti]      Attach to tmux session"
+    echo "  switch  <co|claude|anti>      Switch config + restart"
+    echo ""
+    echo "Environments:"
+    echo "  co      GitHub Copilot    :3003"
+    echo "  claude  Direct Anthropic  :3002"
+    echo "  anti    Antigravity       :3001"
+}
+
+validate_env() {
+    local env="$1"
+    if [[ -z "${PORTS[$env]+x}" ]]; then
+        echo -e "${RED}Error:${NC} Unknown environment '$env'. Use: co, claude, anti"
+        exit 1
+    fi
+}
+
+main() {
+    local cmd="${1:-}"
+    local env="${2:-}"
+
+    case "$cmd" in
+        start|stop|restart)
+            if [[ "$env" == "all" || -z "$env" ]]; then
+                for e in "${ENVS[@]}"; do
+                    "cmd_$cmd" "$e"
+                done
+            else
+                validate_env "$env"
+                "cmd_$cmd" "$env"
+            fi
+            ;;
+        status)
+            cmd_status
+            ;;
+        logs)
+            [[ -z "$env" ]] && { echo -e "${RED}Error:${NC} Specify env: oc logs <co|claude|anti>"; exit 1; }
+            validate_env "$env"
+            cmd_logs "$env"
+            ;;
+        switch)
+            [[ -z "$env" ]] && { echo -e "${RED}Error:${NC} Specify env: oc switch <co|claude|anti>"; exit 1; }
+            validate_env "$env"
+            cmd_switch "$env"
+            ;;
+        -h|--help|help|"")
+            usage
+            ;;
+        *)
+            echo -e "${RED}Error:${NC} Unknown command '$cmd'"
+            usage
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"
