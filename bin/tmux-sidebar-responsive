@@ -17,51 +17,28 @@ fi
 date +%s%N 2>/dev/null | cut -b1-13 > "$LAST_RUN" || date +%s > "$LAST_RUN"
 
 # Thresholds (tuned for Galaxy Fold inner ~60 cols)
-HIDE_BELOW=60        # hide sidebar entirely on very narrow
+HIDE_BELOW=55        # hide sidebar entirely (Fold inner margin)
 NARROW_BELOW=100     # use narrow sidebar (12 cols)
 NORMAL_WIDTH=20      # default sidebar width
 NARROW_WIDTH=12      # narrow sidebar width
 
-SIDEBAR_SCRIPT="${HOME}/.tmux/bin/tmux-sidebar"
-
 # Get client width
 client_width=$(tmux display-message -p '#{client_width}' 2>/dev/null || echo 120)
 
-# Find sidebar pane
+# Find sidebar pane — only act on EXISTING sidebars (never auto-create)
 sidebar_pane=$(tmux list-panes -F '#{pane_id}:#{pane_title}' 2>/dev/null \
     | grep ':sidebar$' | head -1 | cut -d: -f1)
 
+# No sidebar in this session? Nothing to do.
+[[ -z "$sidebar_pane" ]] && exit 0
+
 if [[ $client_width -lt $HIDE_BELOW ]]; then
     # ── Too narrow: hide sidebar ──
-    if [[ -n "$sidebar_pane" ]]; then
-        tmux kill-pane -t "$sidebar_pane" 2>/dev/null
-    fi
+    tmux kill-pane -t "$sidebar_pane" 2>/dev/null
 elif [[ $client_width -lt $NARROW_BELOW ]]; then
     # ── Medium: narrow sidebar ──
-    if [[ -n "$sidebar_pane" ]]; then
-        # Resize existing sidebar
-        tmux resize-pane -t "$sidebar_pane" -x "$NARROW_WIDTH" 2>/dev/null
-    else
-        # Create narrow sidebar
-        first_pane=$(tmux list-panes -F '#{pane_id}' 2>/dev/null | head -1)
-        [[ -z "$first_pane" ]] && exit 0
-        tmux split-window -hb -t "$first_pane" -l "$NARROW_WIDTH" \
-            "exec $SIDEBAR_SCRIPT"
-        tmux select-pane -T sidebar
-        tmux select-pane -R
-    fi
+    tmux resize-pane -t "$sidebar_pane" -x "$NARROW_WIDTH" 2>/dev/null
 else
     # ── Wide: full sidebar ──
-    if [[ -n "$sidebar_pane" ]]; then
-        # Resize to normal
-        tmux resize-pane -t "$sidebar_pane" -x "$NORMAL_WIDTH" 2>/dev/null
-    else
-        # Create normal sidebar
-        first_pane=$(tmux list-panes -F '#{pane_id}' 2>/dev/null | head -1)
-        [[ -z "$first_pane" ]] && exit 0
-        tmux split-window -hb -t "$first_pane" -l "$NORMAL_WIDTH" \
-            "exec $SIDEBAR_SCRIPT"
-        tmux select-pane -T sidebar
-        tmux select-pane -R
-    fi
+    tmux resize-pane -t "$sidebar_pane" -x "$NORMAL_WIDTH" 2>/dev/null
 fi

@@ -12,6 +12,15 @@ if tmux list-panes -F '#{pane_title}' 2>/dev/null | grep -q '^sidebar$'; then
     exit 0
 fi
 
+# Skip if terminal too narrow
+client_width=$(tmux display-message -p '#{client_width}' 2>/dev/null || echo 120)
+[[ $client_width -lt 55 ]] && exit 0
+
+# Responsive width
+if [[ $client_width -lt 100 ]]; then
+    SIDEBAR_WIDTH=12
+fi
+
 # Create sidebar
 first_pane=$(tmux list-panes -F '#{pane_id}' 2>/dev/null | head -1)
 [[ -z "$first_pane" ]] && exit 0

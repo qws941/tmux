@@ -6,7 +6,7 @@
 # Sort: attached sessions first, then unattached (alphabetical within each)
 # Highlight: ▸ = current (blue bg), ● = attached (green), dim = inactive
 
-set -uo pipefail
+set -euo pipefail
 
 # Tokyo Night ANSI colors
 readonly C_RESET='\033[0m'

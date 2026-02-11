@@ -22,7 +22,7 @@ if [[ -n "$sidebar_pane" ]]; then
     tmux kill-pane -t "$sidebar_pane"
 else
     # Sidebar doesn't exist — create it (skip if too narrow)
-    [[ $client_width -lt 60 ]] && exit 0
+    [[ $client_width -lt 55 ]] && exit 0
     first_pane=$(tmux list-panes -F '#{pane_id}' 2>/dev/null | head -1)
     [[ -z "$first_pane" ]] && exit 0
 

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # tmux-session-order — output sessions sorted by most recently active
 # Simple flat list, no tiers. Used by session-jump and session-cycle.
-set -uo pipefail
+set -euo pipefail
 
-tmux list-sessions -F '#{session_name}' 2>/dev/null
+tmux list-sessions -F '#{session_activity}|#{session_name}' 2>/dev/null \
+    | sort -t'|' -k1 -rn \
+    | cut -d'|' -f2
