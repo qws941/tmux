@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# tmux-session-cycle — Navigate sessions in sidebar display order
+# Usage: tmux-session-cycle up|down
+set -euo pipefail
+
+dir=${1:?Usage: tmux-session-cycle up|down}
+current=$(tmux display-message -p '#{session_name}')
+
+mapfile -t sessions < <(~/.tmux/bin/tmux-session-order)
+total=${#sessions[@]}
+[[ $total -le 1 ]] && exit 0
+
+# find current index
+idx=-1
+for i in "${!sessions[@]}"; do
+    [[ "${sessions[$i]}" == "$current" ]] && { idx=$i; break; }
+done
+[[ $idx -lt 0 ]] && exit 1
+
+# calculate next
+case "$dir" in
+    up)   next=$(( (idx - 1 + total) % total )) ;;
+    down) next=$(( (idx + 1) % total )) ;;
+    *)    exit 1 ;;
+esac
+
+tmux switch-client -t "${sessions[$next]}"

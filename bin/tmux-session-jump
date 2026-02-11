@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# tmux-session-jump — Jump to Nth session (sidebar display order)
+# Uses tmux-session-order for consistent 3-tier sorting
+set -euo pipefail
+idx=${1:?Usage: tmux-session-jump N}
+target=$(~/.tmux/bin/tmux-session-order | sed -n "${idx}p")
+[[ -n "$target" ]] && tmux switch-client -t "$target"
+exit 0
