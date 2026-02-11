@@ -6,6 +6,14 @@ set -euo pipefail
 
 export PATH="$HOME/.local/bin:$HOME/bin:$PATH"
 
+# Adaptive layout for narrow screens (Galaxy Fold ~60 cols)
+_term_width="${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}"
+if [[ "$_term_width" -lt 60 ]]; then
+  _preview_pos="bottom:40%"
+else
+  _preview_pos="right:60%"
+fi
+
 SCAN_DIR="${HOME}/dev"
 EXTRA_DIRS=("${HOME}/.config/opencode")
 
@@ -70,7 +78,7 @@ else
                  echo -e "\033[90m$(printf "%.0s─" {1..50})\033[0m"
                  ls -1 --color=always "$dir" 2>/dev/null | head -30
                fi
-             ' --preview-window=right:60%
+             ' --preview-window="$_preview_pos"
   ) || { tmux switch-client -t "${_orig_session}" 2>/dev/null; exit 0; }
 fi
 
@@ -83,6 +91,8 @@ else
 
   if ! tmux has-session -t="${session_name}" 2>/dev/null; then
     tmux new-session -ds "${session_name}" -c "${selected}"
+    # Auto-create sidebar in new session
+    ~/.tmux/bin/tmux-sidebar-init "${session_name}" &
   fi
 fi
 
