@@ -6,7 +6,7 @@
 
 ## OVERVIEW
 
-Bash tmux configuration and session management toolkit. Symlinked as `~/.tmux`. Includes modular tmux config (`conf.d/`), fzf-powered session management (`bin/`), per-project layout templates (`layouts/`), and OpenCode AI multi-environment manager (`oc`, `claude`, `anti`, `co`).
+Bash tmux configuration and session management toolkit. Symlinked as `~/.tmux`. Includes modular tmux config (`conf.d/`), fzf-powered session management (`bin/`), per-project layout templates (`layouts/`), and OpenCode AI multi-environment manager (`oc` service + `ocenv` shortcuts).
 
 ## STRUCTURE
 
@@ -14,7 +14,8 @@ Bash tmux configuration and session management toolkit. Symlinked as `~/.tmux`. 
 tmux/
 ├── tmux.conf                # Modular loader: sources conf.d/*.conf
 ├── oc                       # OpenCode multi-env manager (anti/claude/co)
-├── claude / anti / co       # OpenCode env shortcuts (profile switch or attach)
+├── ocenv                    # Generic env shortcut (profile switch or attach)
+├── claude / anti / co       # 2-line stubs → delegate to ocenv via OCENV_NAME
 ├── bin/
 │   ├── tmux-sessionizer     # fzf session picker with LIVE preview
 │   ├── tmux-auto-attach     # SSH auto-attach on login
@@ -49,7 +50,7 @@ tmux/
 | Add project layout | `layouts/{project}.yml` |
 | Fix session picker | `bin/tmux-sessionizer` |
 | Fix status bar tabs | `bin/tmux-status-sessions` |
-| OpenCode env management | `oc` (main), `claude`/`anti`/`co` (shortcuts) |
+| OpenCode env management | `oc` (service), `ocenv` (shortcuts), `claude`/`anti`/`co` (stubs) |
 | SSH auto-attach | `bin/tmux-auto-attach` + `~/.bashrc` integration |
 | Systemd tmux service | `systemd/tmux-server.service` |
 
@@ -63,7 +64,7 @@ tmux/
   - fzf color string: `bg+:#292e42,fg:#a9b1d6,fg+:#c0caf5,hl:#bb9af7,hl+:#bb9af7,info:#7aa2f7,prompt:#7dcfff,pointer:#bb9af7,marker:#9ece6a,header:#565f89`
 - **OpenCode envs**: 3 isolated environments with XDG separation
   - `anti` = Antigravity (:3011), `claude` = Direct Anthropic (:3012), `co` = Copilot (:3013)
-- **Shortcuts pattern**: No args = switch config profile, with args = attach to `oc-{env}` session at `~/dev/$project`
+- **Shortcuts pattern**: `claude`/`anti`/`co` are 2-line stubs that exec `ocenv` with `OCENV_NAME`. No args = switch config profile, with args = attach to `oc-{env}` session at `~/dev/$project`
 - **Layout YMLs**: ASCII diagrams document pane arrangement in comments
 - **Live session switching**: sessionizer uses `focus:execute-silent` to switch sessions while navigating fzf picker
 - **Commit style**: Conventional commits (feat:, fix:, chore:, etc.)
@@ -74,7 +75,7 @@ tmux/
 |-------|-----|
 | Set `escape-time` > 0 | Breaks OpenCode TUI input responsiveness |
 | Change fzf color scheme without updating ALL fzf calls | Tokyo Night must be consistent across sessionizer, session-kill, etc. |
-| Edit `oc` password inline | Hardcoded `OPENCODE_SERVER_PASSWORD` in `oc` — use env var instead |
+| Hardcode password in `oc` scripts | `OPENCODE_SERVER_PASSWORD` must come from `.env` (gitignored) — never inline |
 | Add conf.d files without numbered prefix | Breaks deterministic load order |
 | Modify `data/in-memoria.db` | Binary AI cache, auto-generated |
 | Skip `tmux source-file` after conf.d changes | Changes won't apply until reload |

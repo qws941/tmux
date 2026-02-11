@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
 # tmux-layout-apply — Apply YAML layout to a tmux session
-# Usage: tmux-layout-apply <session_name> [working_dir]
+# Usage: tmux-layout-apply <session_name> [working_dir] [layout_file]
 #
-# Looks for layouts/{session_name}.yml, falls back to layouts/default.yml.
+# If layout_file is given, uses that directly.
+# Otherwise looks for layouts/{session_name}.yml, falls back to default.yml.
 # Requires yq (mikefarah). Silently exits if yq is missing.
 
 set -euo pipefail
 
 LAYOUT_DIR="${HOME}/.tmux/layouts"
-session="${1:?Usage: tmux-layout-apply <session> [workdir]}"
+session="${1:?Usage: tmux-layout-apply <session> [workdir] [layout_file]}"
 workdir="${2:-.}"
+explicit_layout="${3:-}"
 
 # Respect tmux base-index (default 0, commonly set to 1)
 base_index=$(tmux show-option -gv base-index 2>/dev/null || echo 0)
@@ -23,9 +25,13 @@ fi
 # Require yq
 command -v yq &>/dev/null || exit 0
 
-# Find layout: project-specific → default → exit
-layout="${LAYOUT_DIR}/${session}.yml"
-[[ -f "$layout" ]] || layout="${LAYOUT_DIR}/default.yml"
+# Find layout: explicit → project-specific → default → exit
+if [[ -n "$explicit_layout" && -f "$explicit_layout" ]]; then
+  layout="$explicit_layout"
+else
+  layout="${LAYOUT_DIR}/${session}.yml"
+  [[ -f "$layout" ]] || layout="${LAYOUT_DIR}/default.yml"
+fi
 [[ -f "$layout" ]] || exit 0
 
 num_windows=$(yq '.windows | length' "$layout")
