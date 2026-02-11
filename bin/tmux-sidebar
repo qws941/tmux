@@ -106,14 +106,15 @@ get_oc_status() {
     return 0
 }
 
-# Mosh detection — walk process tree for mosh-server ancestor
+# Mosh detection — check env var (fast) or process tree (fallback)
 is_mosh() {
+    [[ -n "${MOSH_KEY:-}" ]] && return 0
     pstree -s $$ 2>/dev/null | grep -q mosh
 }
 
-# Refresh interval: aggressive locally, gentle over mosh
+# Refresh interval: gentle over mosh (save bandwidth), aggressive locally
 if is_mosh; then
-    REFRESH_INTERVAL=2
+    REFRESH_INTERVAL=3
 else
     REFRESH_INTERVAL=0.5
 fi
