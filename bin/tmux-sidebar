@@ -2,6 +2,9 @@
 # tmux-sidebar — persistent session list panel (display-only)
 # Runs in a narrow left pane, auto-refreshes every 1s
 # Tokyo Night color scheme
+#
+# Sort: attached sessions first, then unattached (alphabetical within each)
+# Highlight: ▸ = current (blue bg), ● = attached (green), dim = inactive
 
 set -uo pipefail
 
@@ -11,10 +14,62 @@ readonly C_BG='\033[48;2;26;27;38m'       # #1a1b26
 readonly C_FG='\033[38;2;169;177;214m'     # #a9b1d6
 readonly C_ACCENT='\033[38;2;122;162;247m' # #7aa2f7
 readonly C_ACTIVE='\033[1;38;2;122;162;247m' # #7aa2f7 bold
+readonly C_ACTIVE_BG='\033[48;2;41;46;66m'   # #292e42 bg highlight
 readonly C_DIM='\033[38;2;86;95;137m'      # #565f89
+readonly C_IDLE='\033[38;2;52;58;80m'     # #343a50 — very dim for idle
 readonly C_GREEN='\033[38;2;158;206;106m'  # #9ece6a
 readonly C_PURPLE='\033[38;2;187;154;247m' # #bb9af7
 readonly C_BORDER='\033[38;2;59;66;97m'    # #3b4261
+readonly C_CYAN='\033[38;2;125;207;255m'   # #7dcfff
+readonly C_YELLOW='\033[38;2;224;175;104m'  # #e0af68
+
+# OC status — detect opencode process in current session
+get_oc_status() {
+    local session="$1" width="$2"
+    local pane_pids
+    pane_pids=$(tmux list-panes -t "$session" -F '#{pane_pid}' 2>/dev/null)
+    [[ -z "$pane_pids" ]] && return 1
+
+    local pid
+    for pid in $pane_pids; do
+        # Check children of shell process for opencode
+        local oc_pid
+        oc_pid=$(pgrep -P "$pid" -x opencode 2>/dev/null | head -1)
+        [[ -z "$oc_pid" ]] && continue
+
+        # Detect environment from process environ
+        local env_name="oc"
+        local port=""
+        if [[ -r "/proc/$oc_pid/environ" ]]; then
+            port=$(tr '\0' '\n' < "/proc/$oc_pid/environ" 2>/dev/null | grep '^OPENCODE_SERVER_URL=' | grep -oP ':\K\d+' | tail -1)
+        fi
+        case "$port" in
+            3011) env_name="anti" ;;
+            3012) env_name="claude" ;;
+            3013) env_name="co" ;;
+        esac
+
+        if [[ $width -le 15 ]]; then
+            echo "${env_name}"
+        else
+            echo "${env_name} ● running"
+        fi
+        return 0
+    done
+    return 1
+}
+
+# Mosh detection — walk process tree for mosh-server ancestor
+is_mosh() {
+    pstree -s $$ 2>/dev/null | grep -q mosh
+}
+
+# Refresh interval: aggressive locally, gentle over mosh
+if is_mosh; then
+    REFRESH_INTERVAL=2
+else
+    REFRESH_INTERVAL=0.5
+fi
 
 # Get terminal dimensions
 get_height() { tput lines 2>/dev/null || echo 24; }
@@ -55,21 +110,61 @@ truncate() {
     fi
 }
 
+# Render a single session line
+render_session() {
+    local name="$1" windows="$2" attached="$3"
+    local width="$4" inner="$5" is_current="$6" is_narrow="$7"
+    local idx="$8"
+
+    local indicator=" "
+    local color="$C_DIM"
+    local bg=""
+
+    if [[ "$is_current" == "1" ]]; then
+        indicator="▸"
+        color="$C_ACTIVE"
+        bg="$C_ACTIVE_BG"
+    elif [[ "$attached" -gt 0 ]]; then
+        indicator="●"
+        color="$C_GREEN"
+    fi
+
+    local display_name
+    local num_prefix="${C_DIM}${idx}${C_RESET}"
+    if [[ "$is_narrow" == "1" ]]; then
+        display_name=$(truncate "$name" $((inner - 4)))
+        printf " ${bg}${num_prefix}${color}%s%s${C_RESET}" "$indicator" "$display_name"
+        tput el 2>/dev/null
+        echo ""
+    else
+        display_name=$(truncate "$name" $((inner - 5)))
+        local badge=""
+        if [[ "$windows" -gt 1 ]]; then
+            badge="${C_DIM}[${windows}]${C_RESET}"
+        fi
+        printf " ${bg}${num_prefix}${color}%s%-*s${C_RESET} %b" \
+            "$indicator" $((inner - 7)) "$display_name" "$badge"
+        tput el 2>/dev/null
+        echo ""
+    fi
+}
+
 # Render the sidebar
 render() {
-    local width
+    local width height inner is_narrow current_session
     width=$(get_width)
-    local height
     height=$(get_height)
-    local inner=$((width - 2))
-    local current_session
-    current_session=$(tmux display-message -p '#{client_session}' 2>/dev/null || echo "")
+    inner=$((width - 2))
+    is_narrow=0
+    [[ $width -le 15 ]] && is_narrow=1
+
+    current_session=$(tmux display-message -p '#{session_name}' 2>/dev/null || echo "")
 
     # Move to top-left
     tput cup 0 0
 
-    # Header — adapt for narrow width
-    if [[ $width -le 15 ]]; then
+    # Header
+    if [[ $is_narrow == 1 ]]; then
         printf " ${C_ACCENT}%-*s${C_RESET}\n" "$inner" "Sess"
     else
         printf " ${C_ACCENT}%-*s${C_RESET}\n" "$inner" "Sessions"
@@ -78,48 +173,19 @@ render() {
     draw_line "$inner"
     echo ""
 
-    # Session list
+    # Flat list: sorted by most recently active
     local line_num=3
-    local max_lines=$((height - 4))
+    local max_lines=$((height - 6))  # Reserve room for OC status + footer
+    local idx=1
 
-    while IFS='|' read -r name windows attached path; do
+    while IFS='|' read -r name windows attached path activity; do
         [[ $line_num -ge $max_lines ]] && break
-
-        # Format: indicator + name
-        local indicator=" "
-        local color="$C_DIM"
-
-        if [[ "$name" == "$current_session" ]]; then
-            indicator="▸"
-            color="$C_ACTIVE"
-        elif [[ "$attached" -gt 0 ]]; then
-            indicator="●"
-            color="$C_GREEN"
-        fi
-
-        local display_name
-        if [[ $width -le 15 ]]; then
-            # Narrow: icon + truncated name only
-            display_name=$(truncate "$name" $((inner - 3)))
-            printf " ${color}%s%s${C_RESET}" "$indicator" "$display_name"
-            tput el 2>/dev/null
-            echo ""
-        else
-            display_name=$(truncate "$name" $((inner - 4)))
-            # Window count badge
-            local badge=""
-            if [[ "$windows" -gt 1 ]]; then
-                badge="${C_DIM}[${windows}]${C_RESET}"
-            fi
-            printf " ${color}%s %-*s${C_RESET} %b\n" \
-                "$indicator" $((inner - 6)) "$display_name" "$badge"
-        fi
-
-        # Clear rest of line
-        tput el 2>/dev/null
-
+        local is_cur=0
+        [[ "$name" == "$current_session" ]] && is_cur=1
+        render_session "$name" "$windows" "$attached" "$width" "$inner" "$is_cur" "$is_narrow" "$idx"
         line_num=$((line_num + 1))
-    done < <(tmux list-sessions -F '#{session_name}|#{session_windows}|#{session_attached}|#{session_path}' 2>/dev/null)
+        idx=$((idx + 1))
+    done < <(tmux list-sessions -F '#{session_name}|#{session_windows}|#{session_attached}|#{session_path}|#{session_activity}' 2>/dev/null | sort -t'|' -k5,5 -rn)
 
     # Clear remaining lines
     while [[ $line_num -lt $((height - 2)) ]]; do
@@ -128,26 +194,63 @@ render() {
         ((line_num++))
     done
 
-    # Footer
+    # OC status + Footer
+    local oc_info footer_lines=2
+    oc_info=$(get_oc_status "$current_session" "$width")
+    [[ -n "$oc_info" ]] && footer_lines=4
+
+    # Clear lines between session list and footer
+    local footer_start=$((height - footer_lines))
+    while [[ $line_num -lt $footer_start ]]; do
+        tput cup "$line_num" 0
+        tput el 2>/dev/null
+        ((line_num++))
+    done
+
+    if [[ -n "$oc_info" ]]; then
+        tput cup "$((height - 4))" 0
+        echo -ne " "
+        draw_line "$inner"
+        echo ""
+        if [[ $width -le 15 ]]; then
+            printf " ${C_CYAN}▸${C_RESET}${C_YELLOW}%s${C_RESET}" "$oc_info"
+        else
+            printf " ${C_CYAN}▸ ${C_YELLOW}%s${C_RESET}" "$oc_info"
+        fi
+        tput el 2>/dev/null
+    fi
+
     tput cup $((height - 2)) 0
     echo -ne " "
     draw_line "$inner"
     echo ""
-    if [[ $width -le 15 ]]; then
-        printf " ${C_DIM}%-*s${C_RESET}" "$inner" "PgUp/Dn"
+    if [[ $is_narrow == 1 ]]; then
+        printf " ${C_DIM}%-*s${C_RESET}" "$inner" "PgUp↓"
     else
         printf " ${C_DIM}%-*s${C_RESET}" "$inner" "PgUp/Dn switch"
     fi
     tput el 2>/dev/null
 }
 
-# Main loop
+# Main loop — smart redraw: skip if nothing changed
 main() {
     setup_terminal
+    local last_hash=""
 
     while true; do
-        render
-        sleep 1
+        local state oc_state
+        state=$(tmux list-sessions -F '#{session_name}:#{session_attached}:#{session_windows}:#{session_activity}' 2>/dev/null)
+        oc_state=$(tmux display-message -p '#{session_name}' 2>/dev/null)
+        oc_state="${oc_state}:$(pgrep -x opencode 2>/dev/null | head -1)"
+        local cur_hash
+        cur_hash=$(echo "${state}${oc_state}" | md5sum | cut -c1-16)
+
+        if [[ "$cur_hash" != "$last_hash" ]]; then
+            render
+            last_hash="$cur_hash"
+        fi
+
+        sleep "$REFRESH_INTERVAL"
     done
 }
 
