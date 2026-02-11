@@ -115,8 +115,10 @@ is_mosh() {
 # Refresh interval: gentle over mosh (save bandwidth), aggressive locally
 if is_mosh; then
     REFRESH_INTERVAL=3
+    OC_CHECK_EVERY=5    # OC status every 5th cycle (~15s over mosh)
 else
     REFRESH_INTERVAL=0.5
+    OC_CHECK_EVERY=2    # every 2nd cycle (~1s locally)
 fi
 
 # Get terminal dimensions
@@ -288,14 +290,24 @@ render() {
 main() {
     setup_terminal
     local last_hash=""
+    local _oc_cycle=0
+    local _oc_hash=""
 
     while true; do
-        local state oc_state
-        state=$(tmux list-sessions -F '#{session_name}:#{session_attached}:#{session_windows}:#{session_activity}' 2>/dev/null)
-        oc_state=$(tmux display-message -p '#{session_name}' 2>/dev/null)
-        oc_state="${oc_state}:$(pgrep -x opencode 2>/dev/null | head -1)"
+        local state
+        # Removed session_activity — changes on every keystroke, causes
+        # constant rerenders and wastes bandwidth over mosh
+        state=$(tmux list-sessions -F '#{session_name}:#{session_attached}:#{session_windows}' 2>/dev/null)
+
+        # Rate-limit expensive OC checks (pgrep + /proc reads)
+        if (( _oc_cycle % OC_CHECK_EVERY == 0 )); then
+            _oc_hash=$(tmux display-message -p '#{session_name}' 2>/dev/null || echo "")
+            _oc_hash="${_oc_hash}:$(pgrep -x opencode 2>/dev/null | head -1)"
+        fi
+        _oc_cycle=$((_oc_cycle + 1))
+
         local cur_hash
-        cur_hash=$(echo "${state}${oc_state}" | md5sum | cut -c1-16)
+        cur_hash=$(echo "${state}${_oc_hash}" | md5sum | cut -c1-16)
 
         if [[ "$cur_hash" != "$last_hash" ]]; then
             render
