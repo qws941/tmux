@@ -1,0 +1,154 @@
+#!/usr/bin/env bash
+# tmux-sidebar — persistent session list panel (display-only)
+# Runs in a narrow left pane, auto-refreshes every 1s
+# Tokyo Night color scheme
+
+set -uo pipefail
+
+# Tokyo Night ANSI colors
+readonly C_RESET='\033[0m'
+readonly C_BG='\033[48;2;26;27;38m'       # #1a1b26
+readonly C_FG='\033[38;2;169;177;214m'     # #a9b1d6
+readonly C_ACCENT='\033[38;2;122;162;247m' # #7aa2f7
+readonly C_ACTIVE='\033[1;38;2;122;162;247m' # #7aa2f7 bold
+readonly C_DIM='\033[38;2;86;95;137m'      # #565f89
+readonly C_GREEN='\033[38;2;158;206;106m'  # #9ece6a
+readonly C_PURPLE='\033[38;2;187;154;247m' # #bb9af7
+readonly C_BORDER='\033[38;2;59;66;97m'    # #3b4261
+
+# Get terminal dimensions
+get_height() { tput lines 2>/dev/null || echo 24; }
+get_width() { tput cols 2>/dev/null || echo 20; }
+
+# Hide cursor, restore on exit
+setup_terminal() {
+    tput civis 2>/dev/null  # hide cursor
+    tput smcup 2>/dev/null  # alternate screen
+    trap cleanup EXIT INT TERM
+}
+
+cleanup() {
+    tput cnorm 2>/dev/null  # show cursor
+    tput rmcup 2>/dev/null  # restore screen
+    exit 0
+}
+
+# Draw a horizontal line
+draw_line() {
+    local width=$1
+    local char="${2:-─}"
+    local line=""
+    for ((i = 0; i < width; i++)); do
+        line+="$char"
+    done
+    echo -ne "${C_BORDER}${line}${C_RESET}"
+}
+
+# Truncate string to width
+truncate() {
+    local str="$1"
+    local max="$2"
+    if [[ ${#str} -gt $max ]]; then
+        echo "${str:0:$((max - 1))}…"
+    else
+        echo "$str"
+    fi
+}
+
+# Render the sidebar
+render() {
+    local width
+    width=$(get_width)
+    local height
+    height=$(get_height)
+    local inner=$((width - 2))
+    local current_session
+    current_session=$(tmux display-message -p '#{client_session}' 2>/dev/null || echo "")
+
+    # Move to top-left
+    tput cup 0 0
+
+    # Header — adapt for narrow width
+    if [[ $width -le 15 ]]; then
+        printf " ${C_ACCENT}%-*s${C_RESET}\n" "$inner" "Sess"
+    else
+        printf " ${C_ACCENT}%-*s${C_RESET}\n" "$inner" "Sessions"
+    fi
+    echo -ne " "
+    draw_line "$inner"
+    echo ""
+
+    # Session list
+    local line_num=3
+    local max_lines=$((height - 4))
+
+    while IFS='|' read -r name windows attached path; do
+        [[ $line_num -ge $max_lines ]] && break
+
+        # Format: indicator + name
+        local indicator=" "
+        local color="$C_DIM"
+
+        if [[ "$name" == "$current_session" ]]; then
+            indicator="▸"
+            color="$C_ACTIVE"
+        elif [[ "$attached" -gt 0 ]]; then
+            indicator="●"
+            color="$C_GREEN"
+        fi
+
+        local display_name
+        if [[ $width -le 15 ]]; then
+            # Narrow: icon + truncated name only
+            display_name=$(truncate "$name" $((inner - 3)))
+            printf " ${color}%s%s${C_RESET}" "$indicator" "$display_name"
+            tput el 2>/dev/null
+            echo ""
+        else
+            display_name=$(truncate "$name" $((inner - 4)))
+            # Window count badge
+            local badge=""
+            if [[ "$windows" -gt 1 ]]; then
+                badge="${C_DIM}[${windows}]${C_RESET}"
+            fi
+            printf " ${color}%s %-*s${C_RESET} %b\n" \
+                "$indicator" $((inner - 6)) "$display_name" "$badge"
+        fi
+
+        # Clear rest of line
+        tput el 2>/dev/null
+
+        line_num=$((line_num + 1))
+    done < <(tmux list-sessions -F '#{session_name}|#{session_windows}|#{session_attached}|#{session_path}' 2>/dev/null)
+
+    # Clear remaining lines
+    while [[ $line_num -lt $((height - 2)) ]]; do
+        tput cup "$line_num" 0
+        tput el 2>/dev/null
+        ((line_num++))
+    done
+
+    # Footer
+    tput cup $((height - 2)) 0
+    echo -ne " "
+    draw_line "$inner"
+    echo ""
+    if [[ $width -le 15 ]]; then
+        printf " ${C_DIM}%-*s${C_RESET}" "$inner" "PgUp/Dn"
+    else
+        printf " ${C_DIM}%-*s${C_RESET}" "$inner" "PgUp/Dn switch"
+    fi
+    tput el 2>/dev/null
+}
+
+# Main loop
+main() {
+    setup_terminal
+
+    while true; do
+        render
+        sleep 1
+    done
+}
+
+main "$@"

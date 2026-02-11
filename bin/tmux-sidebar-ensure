@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# tmux-sidebar-ensure — ensure sidebar exists in current window
+# Called by window-linked hook
+
+set -euo pipefail
+
+SIDEBAR_WIDTH=${SIDEBAR_WIDTH:-20}
+SIDEBAR_SCRIPT="${HOME}/.tmux/bin/tmux-sidebar"
+
+# Already has sidebar?
+if tmux list-panes -F '#{pane_title}' 2>/dev/null | grep -q '^sidebar$'; then
+    exit 0
+fi
+
+# Create sidebar
+first_pane=$(tmux list-panes -F '#{pane_id}' 2>/dev/null | head -1)
+[[ -z "$first_pane" ]] && exit 0
+
+tmux split-window -hb -t "$first_pane" -l "$SIDEBAR_WIDTH" \
+    "exec $SIDEBAR_SCRIPT"
+tmux select-pane -T sidebar
+tmux select-pane -R

@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# tmux-sidebar-responsive — auto-hide/show/resize sidebar based on terminal width
+# Called by client-resized hook
+
+set -uo pipefail
+
+# Thresholds (tuned for Galaxy Fold inner ~60 cols)
+HIDE_BELOW=60        # hide sidebar entirely on very narrow
+NARROW_BELOW=100     # use narrow sidebar (12 cols)
+NORMAL_WIDTH=20      # default sidebar width
+NARROW_WIDTH=12      # narrow sidebar width
+
+SIDEBAR_SCRIPT="${HOME}/.tmux/bin/tmux-sidebar"
+
+# Get client width
+client_width=$(tmux display-message -p '#{client_width}' 2>/dev/null || echo 120)
+
+# Find sidebar pane
+sidebar_pane=$(tmux list-panes -F '#{pane_id}:#{pane_title}' 2>/dev/null \
+    | grep ':sidebar$' | head -1 | cut -d: -f1)
+
+if [[ $client_width -lt $HIDE_BELOW ]]; then
+    # ── Too narrow: hide sidebar ──
+    if [[ -n "$sidebar_pane" ]]; then
+        tmux kill-pane -t "$sidebar_pane" 2>/dev/null
+    fi
+elif [[ $client_width -lt $NARROW_BELOW ]]; then
+    # ── Medium: narrow sidebar ──
+    if [[ -n "$sidebar_pane" ]]; then
+        # Resize existing sidebar
+        tmux resize-pane -t "$sidebar_pane" -x "$NARROW_WIDTH" 2>/dev/null
+    else
+        # Create narrow sidebar
+        first_pane=$(tmux list-panes -F '#{pane_id}' 2>/dev/null | head -1)
+        [[ -z "$first_pane" ]] && exit 0
+        tmux split-window -hb -t "$first_pane" -l "$NARROW_WIDTH" \
+            "exec $SIDEBAR_SCRIPT"
+        tmux select-pane -T sidebar
+        tmux select-pane -R
+    fi
+else
+    # ── Wide: full sidebar ──
+    if [[ -n "$sidebar_pane" ]]; then
+        # Resize to normal
+        tmux resize-pane -t "$sidebar_pane" -x "$NORMAL_WIDTH" 2>/dev/null
+    else
+        # Create normal sidebar
+        first_pane=$(tmux list-panes -F '#{pane_id}' 2>/dev/null | head -1)
+        [[ -z "$first_pane" ]] && exit 0
+        tmux split-window -hb -t "$first_pane" -l "$NORMAL_WIDTH" \
+            "exec $SIDEBAR_SCRIPT"
+        tmux select-pane -T sidebar
+        tmux select-pane -R
+    fi
+fi

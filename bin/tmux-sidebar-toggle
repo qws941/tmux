@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# tmux-sidebar-toggle — show/hide the sidebar pane
+
+set -euo pipefail
+
+SIDEBAR_SCRIPT="${HOME}/.tmux/bin/tmux-sidebar"
+
+# Responsive width based on terminal size
+client_width=$(tmux display-message -p '#{client_width}' 2>/dev/null || echo 120)
+if [[ $client_width -lt 100 ]]; then
+    SIDEBAR_WIDTH=12
+else
+    SIDEBAR_WIDTH=20
+fi
+
+# Find sidebar pane by title
+sidebar_pane=$(tmux list-panes -F '#{pane_id}:#{pane_title}' 2>/dev/null \
+    | grep ':sidebar$' | head -1 | cut -d: -f1)
+
+if [[ -n "$sidebar_pane" ]]; then
+    # Sidebar exists — kill it (hide)
+    tmux kill-pane -t "$sidebar_pane"
+else
+    # Sidebar doesn't exist — create it (skip if too narrow)
+    [[ $client_width -lt 60 ]] && exit 0
+    first_pane=$(tmux list-panes -F '#{pane_id}' 2>/dev/null | head -1)
+    [[ -z "$first_pane" ]] && exit 0
+
+    tmux split-window -hb -t "$first_pane" -l "$SIDEBAR_WIDTH" \
+        "exec $SIDEBAR_SCRIPT"
+    tmux select-pane -T sidebar
+    tmux select-pane -R
+fi

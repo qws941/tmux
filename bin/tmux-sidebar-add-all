@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# tmux-sidebar-add-all — add sidebar to all existing sessions that lack one
+# Usage: tmux-sidebar-add-all
+
+set -euo pipefail
+
+SIDEBAR_SCRIPT="${HOME}/.tmux/bin/tmux-sidebar"
+SIDEBAR_WIDTH=${SIDEBAR_WIDTH:-20}
+
+# Iterate all sessions
+while IFS= read -r session; do
+    [[ -z "$session" ]] && continue
+
+    # Check each window in the session
+    while IFS= read -r win_target; do
+        [[ -z "$win_target" ]] && continue
+
+        # Check if sidebar already exists in this window
+        has_sidebar=$(tmux list-panes -t "$win_target" -F '#{pane_title}' 2>/dev/null \
+            | grep -c '^sidebar$' || true)
+
+        if [[ "$has_sidebar" -eq 0 ]]; then
+            first_pane=$(tmux list-panes -t "$win_target" -F '#{pane_id}' 2>/dev/null | head -1)
+            [[ -z "$first_pane" ]] && continue
+
+            tmux split-window -hbf -t "$first_pane" -l "$SIDEBAR_WIDTH" \
+                "exec $SIDEBAR_SCRIPT"
+            tmux select-pane -T sidebar
+            tmux select-pane -R
+        fi
+    done < <(tmux list-windows -t "$session" -F '#{session_name}:#{window_index}' 2>/dev/null)
+done < <(tmux list-sessions -F '#{session_name}' 2>/dev/null)
+
+echo "Sidebar added to all sessions."

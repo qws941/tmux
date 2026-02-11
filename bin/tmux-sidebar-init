@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# tmux-sidebar-init — create sidebar pane in a session
+# Usage: tmux-sidebar-init [session-name]
+# Called by session-created hook or sessionizer
+
+set -euo pipefail
+
+SIDEBAR_WIDTH=${SIDEBAR_WIDTH:-20}
+SIDEBAR_SCRIPT="${HOME}/.tmux/bin/tmux-sidebar"
+
+# Target session (default: current)
+TARGET="${1:-}"
+PANE_FLAG=""
+if [[ -n "$TARGET" ]]; then
+    PANE_FLAG="-t ${TARGET}"
+fi
+
+# Don't add sidebar if one already exists (check for marked pane)
+# shellcheck disable=SC2086
+if tmux list-panes $PANE_FLAG -F '#{pane_title}' 2>/dev/null | grep -q '^sidebar$'; then
+    exit 0
+fi
+
+# Get the first pane in the target
+# shellcheck disable=SC2086
+first_pane=$(tmux list-panes $PANE_FLAG -F '#{pane_id}' 2>/dev/null | head -1)
+
+if [[ -z "$first_pane" ]]; then
+    exit 0
+fi
+
+# Split a narrow pane on the left for the sidebar
+# -hb = horizontal split, before (left side)
+# -l = width
+tmux split-window -hb -t "$first_pane" -l "$SIDEBAR_WIDTH" \
+    "exec $SIDEBAR_SCRIPT"
+
+# Mark the sidebar pane with a title for identification
+tmux select-pane -T sidebar
+
+# Move focus back to the main work pane (right side)
+tmux select-pane -R
