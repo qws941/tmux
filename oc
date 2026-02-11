@@ -199,7 +199,6 @@ cmd_logs() {
 cmd_switch() {
     local env="$1"
 
-    # Run the env-specific config switcher
     if [[ -x "$BIN_DIR/$env" ]]; then
         "$BIN_DIR/$env"
     else
@@ -207,11 +206,39 @@ cmd_switch() {
         return 1
     fi
 
-    # Restart if running
     if is_running "$env"; then
         echo -e "${DIM}Restarting $env...${NC}"
         cmd_restart "$env"
     fi
+}
+
+cmd_health() {
+    echo -e "${BOLD}OpenCode Health Check${NC}"
+    echo -e "${DIM}─────────────────────────────────────────${NC}"
+
+    local all_ok=true
+    for env in "${ENVS[@]}"; do
+        local port="${PORTS[$env]}"
+        local tmux_ok=false port_ok=false
+
+        is_running "$env" && tmux_ok=true
+        curl -sf -o /dev/null --connect-timeout 2 "http://127.0.0.1:$port" 2>/dev/null && port_ok=true
+
+        if $tmux_ok && $port_ok; then
+            echo -e "  ${GREEN}✓${NC}  ${CYAN}$env${NC}  tmux:${GREEN}ok${NC}  port:${GREEN}$port${NC}"
+        elif $tmux_ok && ! $port_ok; then
+            echo -e "  ${YELLOW}⚠${NC}  ${CYAN}$env${NC}  tmux:${GREEN}ok${NC}  port:${RED}$port unresponsive${NC}"
+            all_ok=false
+        elif ! $tmux_ok && $port_ok; then
+            echo -e "  ${YELLOW}⚠${NC}  ${CYAN}$env${NC}  tmux:${RED}dead${NC}  port:${GREEN}$port (orphan?)${NC}"
+            all_ok=false
+        else
+            echo -e "  ${DIM}·${NC}  ${CYAN}$env${NC}  ${DIM}stopped${NC}"
+        fi
+    done
+
+    echo ""
+    $all_ok && echo -e "  ${GREEN}All healthy${NC}" || echo -e "  ${YELLOW}Issues detected${NC}"
 }
 
 # --- Dispatch ---
@@ -223,6 +250,7 @@ usage() {
     echo "  stop    [co|claude|anti|all]  Stop tmux session"
     echo "  restart [co|claude|anti|all]  Stop + start"
     echo "  status                        Show all instances"
+    echo "  health                        Port + tmux health check"
     echo "  logs    [co|claude|anti]      Attach to tmux session"
     echo "  switch  <co|claude|anti>      Switch config + restart"
     echo ""
@@ -257,6 +285,9 @@ main() {
             ;;
         status)
             cmd_status
+            ;;
+        health)
+            cmd_health
             ;;
         logs)
             [[ -z "$env" ]] && { echo -e "${RED}Error:${NC} Specify env: oc logs <co|claude|anti>"; exit 1; }
