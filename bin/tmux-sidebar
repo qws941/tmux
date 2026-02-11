@@ -23,40 +23,87 @@ readonly C_BORDER='\033[38;2;59;66;97m'    # #3b4261
 readonly C_CYAN='\033[38;2;125;207;255m'   # #7dcfff
 readonly C_YELLOW='\033[38;2;224;175;104m'  # #e0af68
 
-# OC status — detect opencode process in current session
+# OC status — detect opencode + parse TUI for tokens/cost/agent
 get_oc_status() {
     local session="$1" width="$2"
-    local pane_pids
-    pane_pids=$(tmux list-panes -t "$session" -F '#{pane_pid}' 2>/dev/null)
-    [[ -z "$pane_pids" ]] && return 1
 
-    local pid
-    for pid in $pane_pids; do
-        # Check children of shell process for opencode
+    # Find the opencode pane in this session
+    local pane_info oc_pane=""
+    while IFS=' ' read -r pane_id pane_cmd; do
+        if [[ "$pane_cmd" == "opencode" ]]; then
+            oc_pane="$pane_id"
+            break
+        fi
+    done < <(tmux list-panes -t "$session" -F '#{pane_id} #{pane_current_command}' 2>/dev/null)
+    [[ -z "$oc_pane" ]] && return 1
+
+    # Capture TUI and parse status line (contains tokens, %, cost)
+    local tui_output
+    tui_output=$(tmux capture-pane -t "$oc_pane" -p 2>/dev/null)
+
+    # Parse header line: "# Title                       154,748  77% ($0.00)"
+    local tokens="" pct="" cost=""
+    local header_line
+    header_line=$(echo "$tui_output" | grep -P '^\s+┃\s+#' | head -1)
+    if [[ -n "$header_line" ]]; then
+        tokens=$(echo "$header_line" | grep -oP '[\d,]+(?=\s+\d+%)' | tr -d ',')
+        pct=$(echo "$header_line" | grep -oP '\d+(?=%)')
+        cost=$(echo "$header_line" | grep -oP '\$[\d.]+')
+    fi
+
+    # Parse agent line: "▣  Sisyphus · claude-opus-4.6"
+    local agent=""
+    local agent_line
+    agent_line=$(echo "$tui_output" | grep '▣' | tail -1)
+    if [[ -n "$agent_line" ]]; then
+        agent=$(echo "$agent_line" | sed 's/.*▣[[:space:]]*//' | awk '{print $1}')
+    fi
+
+    # Detect environment from process environ
+    local env_name="oc"
+    local shell_pid
+    shell_pid=$(tmux list-panes -t "$session" -F '#{pane_id} #{pane_pid}' 2>/dev/null | grep "$oc_pane" | awk '{print $2}')
+    if [[ -n "$shell_pid" ]]; then
         local oc_pid
-        oc_pid=$(pgrep -P "$pid" -x opencode 2>/dev/null | head -1)
-        [[ -z "$oc_pid" ]] && continue
-
-        # Detect environment from process environ
-        local env_name="oc"
-        local port=""
-        if [[ -r "/proc/$oc_pid/environ" ]]; then
+        oc_pid=$(pgrep -P "$shell_pid" -x opencode 2>/dev/null | head -1)
+        if [[ -n "$oc_pid" && -r "/proc/$oc_pid/environ" ]]; then
+            local port
             port=$(tr '\0' '\n' < "/proc/$oc_pid/environ" 2>/dev/null | grep '^OPENCODE_SERVER_URL=' | grep -oP ':\K\d+' | tail -1)
+            case "$port" in
+                3011) env_name="anti" ;;
+                3012) env_name="claude" ;;
+                3013) env_name="co" ;;
+            esac
         fi
-        case "$port" in
-            3011) env_name="anti" ;;
-            3012) env_name="claude" ;;
-            3013) env_name="co" ;;
-        esac
+    fi
 
-        if [[ $width -le 15 ]]; then
-            echo "${env_name}"
+    # Format token count (compact: 154748 → 154k)
+    local tok_fmt=""
+    if [[ -n "$tokens" ]]; then
+        if [[ "$tokens" -ge 1000 ]]; then
+            tok_fmt="$((tokens / 1000))k"
         else
-            echo "${env_name} ● running"
+            tok_fmt="$tokens"
         fi
-        return 0
-    done
-    return 1
+    fi
+
+    # Output structured lines for the footer renderer
+    # Line 1: env + agent
+    # Line 2: tokens + pct + cost
+    if [[ $width -le 15 ]]; then
+        echo "${env_name}"
+        [[ -n "$tok_fmt" ]] && echo "${tok_fmt} ${pct}%"
+    else
+        local line1="${env_name}"
+        [[ -n "$agent" && "$agent" != "" ]] && line1="${env_name} · ${agent}"
+        echo "$line1"
+        if [[ -n "$tok_fmt" ]]; then
+            local line2="${tok_fmt} tok · ${pct}%"
+            [[ -n "$cost" ]] && line2="${line2} · ${cost}"
+            echo "$line2"
+        fi
+    fi
+    return 0
 }
 
 # Mosh detection — walk process tree for mosh-server ancestor
@@ -195,40 +242,44 @@ render() {
     done
 
     # OC status + Footer
-    local oc_info footer_lines=2
-    oc_info=$(get_oc_status "$current_session" "$width")
-    [[ -n "$oc_info" ]] && footer_lines=4
+    local oc_lines=()
+    local oc_raw
+    oc_raw=$(get_oc_status "$current_session" "$width")
+    if [[ -n "$oc_raw" ]]; then
+        while IFS= read -r l; do
+            oc_lines+=("$l")
+        done <<< "$oc_raw"
+    fi
+
+    local footer_lines=$(( 1 + ${#oc_lines[@]} + (${#oc_lines[@]} > 0 ? 1 : 0) ))
+    local footer_start=$((height - footer_lines))
 
     # Clear lines between session list and footer
-    local footer_start=$((height - footer_lines))
     while [[ $line_num -lt $footer_start ]]; do
         tput cup "$line_num" 0
         tput el 2>/dev/null
         ((line_num++))
     done
 
-    if [[ -n "$oc_info" ]]; then
-        tput cup "$((height - 4))" 0
+    if [[ ${#oc_lines[@]} -gt 0 ]]; then
+        tput cup "$footer_start" 0
         echo -ne " "
         draw_line "$inner"
         echo ""
-        if [[ $width -le 15 ]]; then
-            printf " ${C_CYAN}▸${C_RESET}${C_YELLOW}%s${C_RESET}" "$oc_info"
-        else
-            printf " ${C_CYAN}▸ ${C_YELLOW}%s${C_RESET}" "$oc_info"
-        fi
+
+        # Line 1: env · agent
+        printf " ${C_CYAN}▸ ${C_YELLOW}%s${C_RESET}" "${oc_lines[0]}"
         tput el 2>/dev/null
+        echo ""
+
+        # Line 2: tokens · pct · cost (if present)
+        if [[ ${#oc_lines[@]} -gt 1 ]]; then
+            printf " ${C_DIM}%s${C_RESET}" "${oc_lines[1]}"
+            tput el 2>/dev/null
+        fi
     fi
 
-    tput cup $((height - 2)) 0
-    echo -ne " "
-    draw_line "$inner"
-    echo ""
-    if [[ $is_narrow == 1 ]]; then
-        printf " ${C_DIM}%-*s${C_RESET}" "$inner" "PgUp↓"
-    else
-        printf " ${C_DIM}%-*s${C_RESET}" "$inner" "PgUp/Dn switch"
-    fi
+    tput cup $((height - 1)) 0
     tput el 2>/dev/null
 }
 
