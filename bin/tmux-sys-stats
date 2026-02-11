@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# tmux-sys-stats — lightweight CPU load + MEM usage for status bar
+# Uses /proc directly for zero-overhead reads
+
+# CPU: 1-min load average as percentage of cores
+load=$(awk '{print $1}' /proc/loadavg 2>/dev/null || echo 0)
+ncpu=$(nproc 2>/dev/null || echo 1)
+cpu=$(awk "BEGIN {printf \"%.0f\", $load / $ncpu * 100}")
+
+# MEM: used percentage from /proc/meminfo
+mem=$(awk '/^MemTotal:/{t=$2} /^MemAvailable:/{a=$2} END{printf "%.0f", (t-a)/t*100}' /proc/meminfo 2>/dev/null || echo "?")
+
+echo "⚙${cpu}%▪${mem}%"

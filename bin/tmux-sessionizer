@@ -197,31 +197,54 @@ else
       | fzf --prompt="  switch > " \
              --layout=reverse --border=none --no-separator \
              --color="${_fzf_colors}" \
-             --header="● active │ ➕ create" \
-             --bind 'ctrl-r:refresh-preview' \
+              --header="● active │ ➕ create │ ^R rename" \
+              --bind 'ctrl-r:execute(~/.tmux/bin/tmux-session-rename {})+become(~/.tmux/bin/tmux-sessionizer)' \
              --bind "focus:execute-silent(echo {} | grep -q '^● ' && tmux switch-client -t \"\$(echo {} | sed 's/^● //')\" 2>/dev/null || true)" \
              --preview='
                 item={}
                 if [[ "$item" == "➕"* ]]; then
                   echo -e "\033[1;35m➕ New Session\033[0m"
                   echo -e "\033[37mdir → layout → name\033[0m"
-                elif [[ "$item" == "● "* ]]; then
-                  name="${item#● }"
-                  wins=$(tmux list-windows -t "$name" -F "#{window_name}" 2>/dev/null | paste -sd ", " -)
-                  created=$(tmux display-message -t "$name" -p "#{t:session_created}" 2>/dev/null)
-                  echo -e "\033[1;32m● ${name}\033[0m  \033[90m[${wins}]  ${created}\033[0m"
-                  mapfile -t panes < <(tmux list-panes -t "$name" -F "#{pane_index} #{pane_active}" 2>/dev/null)
-                  if [[ "${#panes[@]}" -le 1 ]]; then
-                    tmux capture-pane -t "$name" -p -e 2>/dev/null || echo -e "\033[90m(no active pane)\033[0m"
-                 else
-                   window=$(tmux display-message -t "$name" -p "#{window_index}" 2>/dev/null || echo 0)
-                   for pane_row in "${panes[@]}"; do
-                     pane="${pane_row%% *}"
-                     [[ -z "$pane" ]] && continue
-                     echo -e "\033[38;2;86;95;137m─── pane ${pane} ───\033[0m"
-                     tmux capture-pane -t "$name:${window}.${pane}" -p -e 2>/dev/null | tail -15
+                 elif [[ "$item" == "● "* ]]; then
+                   name="${item#● }"
+                   created=$(tmux display-message -t "$name" -p "#{t:session_created}" 2>/dev/null)
+                   mapfile -t windows < <(tmux list-windows -t "$name" -F "#{window_index}:#{window_name}:#{window_active}:#{window_panes}" 2>/dev/null)
+                   nwin=${#windows[@]}
+                   win_summary=""
+                   for w in "${windows[@]}"; do
+                     IFS=: read -r wi wn wa wp <<< "$w"
+                     if [[ "$wa" == "1" ]]; then
+                       win_summary+=" \033[1;7;34m ${wn}(${wp}) \033[0m"
+                     else
+                       win_summary+=" \033[90m${wn}(${wp})\033[0m"
+                     fi
                    done
-                 fi
+                   echo -e "\033[1;32m● ${name}\033[0m ${win_summary} \033[90m ${created}\033[0m"
+                   echo ""
+                   for w in "${windows[@]}"; do
+                     IFS=: read -r wi wn wa wp <<< "$w"
+                     if [[ "$nwin" -gt 1 ]]; then
+                       if [[ "$wa" == "1" ]]; then
+                         echo -e "\033[1;34m▸ ${wn}\033[0m \033[90m(${wp} panes)\033[0m"
+                       else
+                         echo -e "\033[90m  ${wn}\033[0m \033[90m(${wp} panes)\033[0m"
+                       fi
+                     fi
+                     mapfile -t panes < <(tmux list-panes -t "$name:${wi}" -F "#{pane_index}" 2>/dev/null)
+                     lines_per_pane=$(( (LINES - 6) / (${#panes[@]} * nwin + 1) ))
+                     [[ "$lines_per_pane" -lt 5 ]] && lines_per_pane=5
+                     [[ "$lines_per_pane" -gt 20 ]] && lines_per_pane=20
+                     if [[ "${#panes[@]}" -le 1 ]]; then
+                       tmux capture-pane -t "$name:${wi}" -p -e 2>/dev/null | tail -${lines_per_pane}
+                     else
+                       for pane in "${panes[@]}"; do
+                         [[ -z "$pane" ]] && continue
+                         echo -e "\033[38;2;86;95;137m─── pane ${pane} ───\033[0m"
+                         tmux capture-pane -t "$name:${wi}.${pane}" -p -e 2>/dev/null | tail -${lines_per_pane}
+                       done
+                     fi
+                     [[ "$nwin" -gt 1 ]] && echo ""
+                   done
                 else
                   dir="${item#  }"
                   echo -e "\033[1;33m○ new session\033[0m  ($(basename "$dir" | tr "." "_"))"
