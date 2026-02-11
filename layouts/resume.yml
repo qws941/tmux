@@ -1,0 +1,16 @@
+# resume — Personal resume site + MCP server
+# Stack: TypeScript (Bazel monorepo)
+#
+# ┌──────────────┬──────────────┐
+# │              │   terminal   │
+# │    editor    ├──────────────┤
+# │              │  dev-server  │
+# └──────────────┴──────────────┘
+
+windows:
+  - name: dev
+    layout: main-vertical
+    panes:
+      - name: editor
+      - name: terminal
+      - name: dev-server

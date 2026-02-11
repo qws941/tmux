@@ -1,0 +1,22 @@
+# blacklist — IP reputation / threat intel platform
+# Stack: Python (Flask) backend + Next.js 15 frontend
+#
+# ┌──────────────┬──────────────┐
+# │              │   terminal   │
+# │    editor    ├──────────────┤
+# │              │    server    │
+# └──────────────┴──────────────┘
+
+windows:
+  - name: dev
+    layout: main-vertical
+    panes:
+      - name: editor
+      - name: terminal
+      - name: server
+
+  - name: api
+    layout: even-horizontal
+    panes:
+      - name: flask
+      - name: nextjs

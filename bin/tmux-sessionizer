@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# tmux-sessionizer — taskbar-style session switcher
+# Usage: tmux-sessionizer [directory]
+
+set -euo pipefail
+
+export PATH="$HOME/.local/bin:$HOME/bin:$PATH"
+
+SCAN_DIR="${HOME}/dev"
+EXTRA_DIRS=("${HOME}/.config/opencode")
+
+for cmd in fzf tmux; do
+  command -v "${cmd}" &>/dev/null || { echo "error: ${cmd} not found" >&2; exit 1; }
+done
+
+# --- pick target ---
+if [[ $# -eq 1 ]]; then
+  selected="$1"
+else
+  # Build items: active sessions first, then ~/dev dirs (skip duplicates)
+  active_sessions=$(tmux list-sessions -F '#{session_name}' 2>/dev/null || true)
+  items=""
+
+  # Active sessions (marked ●)
+  while IFS= read -r s; do
+    [[ -z "$s" ]] && continue
+    items+="● ${s}"$'\n'
+  done <<< "${active_sessions}"
+
+  # ~/dev directories (skip if session already exists)
+  while IFS= read -r dir; do
+    name=$(basename "$dir" | tr '.' '_')
+    if ! echo "${active_sessions}" | grep -qx "${name}"; then
+      items+="  ${dir}"$'\n'
+    fi
+  done < <(find "${SCAN_DIR}" -mindepth 1 -maxdepth 1 -type d | sort)
+
+  # Extra directories (e.g. ~/.config/opencode)
+  for dir in "${EXTRA_DIRS[@]}"; do
+    [[ -d "$dir" ]] || continue
+    name=$(basename "$dir" | tr '.' '_')
+    if ! echo "${active_sessions}" | grep -qx "${name}"; then
+      items+="  ${dir}"$'\n'
+    fi
+  done
+
+  selected=$(
+    printf '%s' "${items}" \
+      | fzf --prompt="  switch > " \
+             --layout=reverse --border=none --no-separator \
+             --color=bg+:#292e42,fg:#a9b1d6,fg+:#c0caf5,hl:#bb9af7,hl+:#bb9af7,info:#7aa2f7,prompt:#7dcfff,pointer:#bb9af7,marker:#9ece6a,header:#565f89 \
+             --header="● = active session" \
+             --preview='
+               item={}
+               if [[ "$item" == "● "* ]]; then
+                 name="${item#● }"
+                 echo -e "\033[1;32m● ${name}\033[0m"
+                 echo ""; tmux list-windows -t "$name" -F "  #{window_index}: #{window_name} [#{window_panes} panes] #{?window_active,←,}"
+                 echo ""; echo "created: $(tmux display-message -t "$name" -p "#{t:session_created}")"
+               else
+                 dir="${item#  }"
+                 echo -e "\033[1;33m○ new session\033[0m  ($(basename "$dir" | tr "." "_"))"
+                 echo ""; ls -1 --color=always "$dir" 2>/dev/null | head -20
+               fi
+             ' --preview-window=right:40%
+  ) || exit 0
+fi
+
+# --- resolve selection ---
+if [[ "${selected}" == "● "* ]]; then
+  session_name="${selected#● }"
+else
+  selected="${selected#  }"  # strip leading spaces
+  session_name=$(basename "${selected}" | tr '.' '_')
+
+  if ! tmux has-session -t="${session_name}" 2>/dev/null; then
+    tmux new-session -ds "${session_name}" -c "${selected}"
+  fi
+fi
+
+# --- switch ---
+if [[ -z "${TMUX:-}" ]]; then
+  exec tmux attach-session -t "${session_name}"
+else
+  tmux switch-client -t "${session_name}"
+fi

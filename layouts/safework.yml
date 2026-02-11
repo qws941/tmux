@@ -1,0 +1,22 @@
+# safework — Occupational safety survey system
+# Stack: TypeScript (Hono/CF Workers) + Go (Cobra CLI)
+#
+# ┌──────────────┬──────────────┐
+# │              │   terminal   │
+# │    editor    ├──────────────┤
+# │              │   wrangler   │
+# └──────────────┴──────────────┘
+
+windows:
+  - name: dev
+    layout: main-vertical
+    panes:
+      - name: editor
+      - name: terminal
+      - name: wrangler
+
+  - name: test
+    layout: even-horizontal
+    panes:
+      - name: vitest
+      - name: go-test

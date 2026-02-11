@@ -1,0 +1,23 @@
+# splunk — FortiGate → Splunk → Slack security alerts
+# Stack: Python + TypeScript + React (hybrid)
+#
+# ┌──────────────┬──────────────┐
+# │              │   terminal   │
+# │    editor    ├──────────────┤
+# │              │  splunk-web  │
+# └──────────────┴──────────────┘
+
+windows:
+  - name: dev
+    layout: main-vertical
+    panes:
+      - name: editor
+      - name: terminal
+      - name: splunk-web
+        command: "echo '→ Splunk Web: https://192.168.50.111:8000'"
+
+  - name: test
+    layout: even-horizontal
+    panes:
+      - name: python-test
+      - name: js-test

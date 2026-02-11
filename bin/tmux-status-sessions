@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# tmux-status-sessions — render clickable session tabs for status bar
+# Click a session tab → switch directly to that session
+# Uses tmux format ranges: range=session|$ID triggers Status mouse key
+# Current session: inverted (dark text on blue), others: subtle
+
+current=$(tmux display-message -p '#S')
+
+out=""
+while IFS= read -r line; do
+  [[ -z "$line" ]] && continue
+  sid="${line%%:*}"        # e.g. $1
+  rest="${line#*:}"
+  session="${rest%%:*}"    # e.g. blacklist
+  wins="${rest#*:}"        # e.g. 1
+
+  # Wrap each tab in range=session|$ID for click-to-switch
+  if [[ "$session" == "$current" ]]; then
+    out+="#[range=session|${sid}]#[fg=#1a1b26,bg=#7aa2f7,bold] ● ${session} ${wins}w #[norange]#[default]"
+  else
+    out+="#[range=session|${sid}]#[fg=#a9b1d6,bg=#292e42] ${session} #[fg=#565f89]${wins}w #[norange]#[default]"
+  fi
+done < <(tmux list-sessions -F '#{session_id}:#{session_name}:#{session_windows}' 2>/dev/null | sort)
+
+printf '%s' "$out"

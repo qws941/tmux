@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -euo pipefail
+export PATH="$HOME/.local/bin:$HOME/bin:$PATH"
+
+# ── tmux-session-kill ────────────────────────────────────────────────
+# fzf-based tmux session killer. Supports multi-select (Tab).
+# ─────────────────────────────────────────────────────────────────────
+
+die() { echo "error: $*" >&2; exit 1; }
+command -v fzf >/dev/null || die "fzf not found"
+
+sessions=$(tmux list-sessions -F '#{session_name}' 2>/dev/null) || true
+[[ -z "$sessions" ]] && echo "No active sessions." && exit 0
+
+selected=$(echo "$sessions" | \
+    fzf --prompt="  kill session > " \
+        --height=100% \
+        --reverse \
+        --border=rounded \
+        --color=bg+:#292e42,fg:#a9b1d6,fg+:#c0caf5,hl:#bb9af7,hl+:#bb9af7,info:#7aa2f7,prompt:#7dcfff,pointer:#bb9af7,marker:#9ece6a,header:#565f89 \
+        --multi \
+        --preview='
+            echo "📋 Windows:"
+            tmux list-windows -t {} \
+                -F "  #{window_index}: #{window_name} [#{window_layout}] (#{window_panes} panes)" \
+                2>/dev/null
+            echo ""
+            echo "🕐 Created: $(tmux display-message -t {} -p "#{session_created}" 2>/dev/null | xargs -I{} date -d @{} "+%Y-%m-%d %H:%M" 2>/dev/null || echo "unknown")"
+        ' \
+        --preview-window=right:50%:wrap) || exit 0
+
+[[ -z "$selected" ]] && exit 0
+
+count=0
+while IFS= read -r session; do
+    if tmux kill-session -t "$session" 2>/dev/null; then
+        ((count++))
+    fi
+done <<< "$selected"
+
+echo "Killed $count session(s)."

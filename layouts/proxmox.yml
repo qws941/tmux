@@ -1,0 +1,22 @@
+# proxmox — Homelab IaC (Terraform + Bazel)
+#
+# ┌──────────────┬──────────────┐
+# │              │   terminal   │
+# │    editor    ├──────────────┤
+# │              │   tf-plan    │
+# └──────────────┴──────────────┘
+
+windows:
+  - name: dev
+    layout: main-vertical
+    panes:
+      - name: editor
+      - name: terminal
+      - name: tf-plan
+
+  - name: logs
+    layout: even-vertical
+    panes:
+      - name: cluster
+        command: "echo '→ Proxmox UI: https://192.168.50.100:8006'"
+      - name: monitoring

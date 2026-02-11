@@ -1,0 +1,7 @@
+# Default layout: clean single pane
+# Override per-project with layouts/{project}.yml
+
+windows:
+  - name: dev
+    panes:
+      - name: main

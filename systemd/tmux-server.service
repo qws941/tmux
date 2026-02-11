@@ -1,0 +1,14 @@
+[Unit]
+Description=tmux server
+Documentation=man:tmux(1)
+# Start after basic user session is up
+After=default.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/tmux start-server
+ExecStop=/usr/bin/tmux kill-server
+
+[Install]
+WantedBy=default.target
