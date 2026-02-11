@@ -15,7 +15,7 @@ fi
 
 # Find sidebar pane by title
 sidebar_pane=$(tmux list-panes -F '#{pane_id}:#{pane_title}' 2>/dev/null \
-    | grep ':sidebar$' | head -1 | cut -d: -f1)
+    | grep ':sidebar$' | head -1 | cut -d: -f1 || true)
 
 if [[ -n "$sidebar_pane" ]]; then
     # Sidebar exists — kill it (hide)

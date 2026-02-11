@@ -27,7 +27,7 @@ client_width=$(tmux display-message -p '#{client_width}' 2>/dev/null || echo 120
 
 # Find sidebar pane — only act on EXISTING sidebars (never auto-create)
 sidebar_pane=$(tmux list-panes -F '#{pane_id}:#{pane_title}' 2>/dev/null \
-    | grep ':sidebar$' | head -1 | cut -d: -f1)
+    | grep ':sidebar$' | head -1 | cut -d: -f1 || true)
 
 # No sidebar in this session? Nothing to do.
 [[ -z "$sidebar_pane" ]] && exit 0
