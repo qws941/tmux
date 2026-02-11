@@ -49,20 +49,24 @@ else
       | fzf --prompt="  switch > " \
              --layout=reverse --border=none --no-separator \
              --color=bg+:#292e42,fg:#a9b1d6,fg+:#c0caf5,hl:#bb9af7,hl+:#bb9af7,info:#7aa2f7,prompt:#7dcfff,pointer:#bb9af7,marker:#9ece6a,header:#565f89 \
-             --header="● = active session" \
+             --header="● active │ ^R refresh live" \
+             --bind 'ctrl-r:refresh-preview' \
              --preview='
                item={}
                if [[ "$item" == "● "* ]]; then
                  name="${item#● }"
-                 echo -e "\033[1;32m● ${name}\033[0m"
-                 echo ""; tmux list-windows -t "$name" -F "  #{window_index}: #{window_name} [#{window_panes} panes] #{?window_active,←,}"
-                 echo ""; echo "created: $(tmux display-message -t "$name" -p "#{t:session_created}")"
+                 wins=$(tmux list-windows -t "$name" -F "#{window_name}" 2>/dev/null | paste -sd ", " -)
+                 created=$(tmux display-message -t "$name" -p "#{t:session_created}" 2>/dev/null)
+                 echo -e "\033[1;32m● ${name}\033[0m  \033[90m[${wins}]  ${created}\033[0m"
+                 echo -e "\033[90m$(printf "%.0s─" {1..50})\033[0m"
+                 tmux capture-pane -t "$name" -p -e 2>/dev/null || echo -e "\033[90m(no active pane)\033[0m"
                else
                  dir="${item#  }"
                  echo -e "\033[1;33m○ new session\033[0m  ($(basename "$dir" | tr "." "_"))"
-                 echo ""; ls -1 --color=always "$dir" 2>/dev/null | head -20
+                 echo -e "\033[90m$(printf "%.0s─" {1..50})\033[0m"
+                 ls -1 --color=always "$dir" 2>/dev/null | head -30
                fi
-             ' --preview-window=right:40%
+             ' --preview-window=right:60%
   ) || exit 0
 fi
 
