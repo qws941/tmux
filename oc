@@ -19,7 +19,13 @@ set -euo pipefail
 # --- Config ---
 OPENCODE_BIN="/home/jclee/.opencode/bin/opencode"
 OPENCODE_CONFIG_DIR="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
-OPENCODE_SERVER_PASSWORD="LEqzONO4m8Ba13Gr8ZtJJxjIxT26w1dW"
+# Load password from .env file
+ENV_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/.env"
+if [[ -f "$ENV_FILE" ]]; then
+    # shellcheck source=/dev/null
+    source "$ENV_FILE"
+fi
+: "${OPENCODE_SERVER_PASSWORD:?Error: OPENCODE_SERVER_PASSWORD not set. Copy .env.example to .env}"
 BIN_DIR="$OPENCODE_CONFIG_DIR/bin"
 
 # NVM/Node setup (opencode needs node in PATH)
