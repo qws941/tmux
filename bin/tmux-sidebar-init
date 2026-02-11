@@ -10,33 +10,43 @@ SIDEBAR_SCRIPT="${HOME}/.tmux/bin/tmux-sidebar"
 
 # Target session (default: current)
 TARGET="${1:-}"
-PANE_FLAG=""
 if [[ -n "$TARGET" ]]; then
-    PANE_FLAG="-t ${TARGET}"
+    PANE_TARGET="-t ${TARGET}:"
+else
+    PANE_TARGET=""
 fi
 
 # Don't add sidebar if one already exists (check for marked pane)
 # shellcheck disable=SC2086
-if tmux list-panes $PANE_FLAG -F '#{pane_title}' 2>/dev/null | grep -q '^sidebar$'; then
+if tmux list-panes ${PANE_TARGET} -F '#{pane_title}' 2>/dev/null | grep -q '^sidebar$'; then
     exit 0
 fi
 
-# Get the first pane in the target
-# shellcheck disable=SC2086
-first_pane=$(tmux list-panes $PANE_FLAG -F '#{pane_id}' 2>/dev/null | head -1)
+# Wait for session to be ready (prevents 1col race condition on session-created hook)
+sleep 0.1
 
+# Get the first pane in the target — need exact pane_id for split target
+# shellcheck disable=SC2086
+first_pane=$(tmux list-panes ${PANE_TARGET} -F '#{pane_id}' 2>/dev/null | head -1)
 if [[ -z "$first_pane" ]]; then
+    exit 0
+fi
+
+# Ensure terminal is wide enough for sidebar (min 40 cols)
+# shellcheck disable=SC2086
+pane_width=$(tmux display-message -t "$first_pane" -p '#{pane_width}' 2>/dev/null || echo 0)
+if (( pane_width < 40 )); then
     exit 0
 fi
 
 # Split a narrow pane on the left for the sidebar
 # -hb = horizontal split, before (left side)
-# -l = width
-tmux split-window -hb -t "$first_pane" -l "$SIDEBAR_WIDTH" \
-    "exec $SIDEBAR_SCRIPT"
+# -l = width in columns
+sidebar_pane=$(tmux split-window -hb -t "$first_pane" -l "$SIDEBAR_WIDTH" -PF '#{pane_id}' \
+    "exec $SIDEBAR_SCRIPT")
 
-# Mark the sidebar pane with a title for identification
-tmux select-pane -T sidebar
+# Mark the sidebar pane with a title for identification (using exact pane_id)
+tmux select-pane -t "$sidebar_pane" -T sidebar
 
 # Move focus back to the main work pane (right side)
-tmux select-pane -R
+tmux select-pane -t "$first_pane"
