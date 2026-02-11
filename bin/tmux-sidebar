@@ -10,18 +10,18 @@ set -uo pipefail
 
 # Tokyo Night ANSI colors
 readonly C_RESET='\033[0m'
-readonly C_BG='\033[48;2;26;27;38m'       # #1a1b26
+readonly C_BG='\033[48;2;31;35;53m'       # #1f2335 storm bg
 readonly C_FG='\033[38;2;169;177;214m'     # #a9b1d6
-readonly C_ACCENT='\033[38;2;122;162;247m' # #7aa2f7
-readonly C_ACTIVE='\033[1;38;2;122;162;247m' # #7aa2f7 bold
-readonly C_ACTIVE_BG='\033[48;2;41;46;66m'   # #292e42 bg highlight
-readonly C_DIM='\033[38;2;86;95;137m'      # #565f89
-readonly C_IDLE='\033[38;2;52;58;80m'     # #343a50 — very dim for idle
-readonly C_GREEN='\033[38;2;158;206;106m'  # #9ece6a
-readonly C_PURPLE='\033[38;2;187;154;247m' # #bb9af7
-readonly C_BORDER='\033[38;2;59;66;97m'    # #3b4261
+readonly C_ACCENT='\033[38;2;61;89;161m'   # #3d59a1 storm accent
+readonly C_ACTIVE='\033[1;38;2;61;89;161m' # #3d59a1 bold
+readonly C_ACTIVE_BG='\033[48;2;31;35;53m'   # #1f2335 storm bg
+readonly C_DIM='\033[38;2;59;66;97m'       # #3b4261 storm dim
+readonly C_IDLE='\033[38;2;42;48;73m'      # #2a3049 storm idle
+readonly C_GREEN='\033[38;2;115;218;202m'  # #73daca storm teal
+readonly C_PURPLE='\033[38;2;157;124;216m' # #9d7cd8 storm purple
+readonly C_BORDER='\033[38;2;42;48;73m'    # #2a3049 storm border
 readonly C_CYAN='\033[38;2;125;207;255m'   # #7dcfff
-readonly C_YELLOW='\033[38;2;224;175;104m'  # #e0af68
+readonly C_YELLOW='\033[38;2;224;175;104m' # #e0af68
 
 # OC status — detect opencode + parse TUI for tokens/cost/agent
 get_oc_status() {

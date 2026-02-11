@@ -23,17 +23,17 @@ elif [ "$width" -lt 80 ]; then
     # ── Compact (Galaxy Fold inner ~60 cols) ──
     tmux set -gq status-left-length 15
     tmux set -gq status-right-length 20
-    tmux set -gq status-left '#[fg=#7aa2f7,bold] #S #[fg=#565f89]| '
-    tmux set -gq status-right '#{?client_prefix,#[fg=#bb9af7]P ,}#[fg=#a9b1d6]%H:%M '
-    tmux setw -gq window-status-format '#[fg=#565f89] #I '
-    tmux setw -gq window-status-current-format '#[fg=#7aa2f7,bold]>#I '
+    tmux set -gq status-left '#[fg=#3d59a1,bold] #S #[fg=#3b4261]| '
+    tmux set -gq status-right '#{?client_prefix,#[fg=#9d7cd8]P ,}#[fg=#a9b1d6]%H:%M '
+    tmux setw -gq window-status-format '#[fg=#3b4261] #I '
+    tmux setw -gq window-status-current-format '#[fg=#3d59a1,bold]>#I '
 
 else
     # ── Normal (desktop >=80 cols) ──
     tmux set -gq status-left-length 30
     tmux set -gq status-right-length 80
-    tmux set -gq status-left '#[fg=#7aa2f7,bold] #S #[fg=#565f89]| '
-    tmux set -gq status-right '#[fg=#9ece6a]#(~/.tmux/bin/tmux-git-status) #[fg=#565f89]#{?client_prefix,#[fg=#bb9af7]P ,}#{?pane_input_off,#[fg=#f7768e]*,} #[fg=#565f89]| #[fg=#7dcfff]#(~/.tmux/bin/tmux-sys-stats) #[fg=#565f89]| #[fg=#a9b1d6]%H:%M '
-    tmux setw -gq window-status-format '#[fg=#565f89] #I '
-    tmux setw -gq window-status-current-format '#[fg=#7aa2f7,bold]>#I '
+    tmux set -gq status-left '#[fg=#3d59a1,bold] #S #[fg=#3b4261]| '
+    tmux set -gq status-right '#[fg=#73daca]#(~/.tmux/bin/tmux-git-status) #[fg=#3b4261]#{?client_prefix,#[fg=#9d7cd8]P ,}#{?pane_input_off,#[fg=#f7768e]*,} #[fg=#3b4261]| #[fg=#7dcfff]#(~/.tmux/bin/tmux-sys-stats) #[fg=#3b4261]| #[fg=#a9b1d6]%H:%M '
+    tmux setw -gq window-status-format '#[fg=#3b4261] #I '
+    tmux setw -gq window-status-current-format '#[fg=#3d59a1,bold]>#I '
 fi
