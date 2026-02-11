@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# tmux-auto-attach — SSH 접속시 자동 세션 연결 (피커 없이 즉시)
+# Usage: Add to ~/.bashrc:
+#   [[ -n "$SSH_CONNECTION" && -z "$TMUX" ]] && ~/.tmux/bin/tmux-auto-attach
+
+set -euo pipefail
+
+# Already inside tmux? Skip.
+[[ -n "${TMUX:-}" ]] && exit 0
+
+# Attach to most recent session, or create 'main'
+exec tmux attach 2>/dev/null || exec tmux new-session -s main

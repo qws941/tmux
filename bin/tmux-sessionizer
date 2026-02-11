@@ -13,6 +13,9 @@ for cmd in fzf tmux; do
   command -v "${cmd}" &>/dev/null || { echo "error: ${cmd} not found" >&2; exit 1; }
 done
 
+# Save original session for cancel/restore
+_orig_session=$(tmux display-message -p '#{session_name}' 2>/dev/null || true)
+
 # --- pick target ---
 if [[ $# -eq 1 ]]; then
   selected="$1"
@@ -49,8 +52,9 @@ else
       | fzf --prompt="  switch > " \
              --layout=reverse --border=none --no-separator \
              --color=bg+:#292e42,fg:#a9b1d6,fg+:#c0caf5,hl:#bb9af7,hl+:#bb9af7,info:#7aa2f7,prompt:#7dcfff,pointer:#bb9af7,marker:#9ece6a,header:#565f89 \
-             --header="● active │ ^R refresh live" \
+             --header="● active │ ↑↓ live switch │ ^R refresh │ ESC restore" \
              --bind 'ctrl-r:refresh-preview' \
+             --bind "focus:execute-silent(echo {} | grep -q '^● ' && tmux switch-client -t \"\$(echo {} | sed 's/^● //')\" 2>/dev/null || true)" \
              --preview='
                item={}
                if [[ "$item" == "● "* ]]; then
@@ -67,7 +71,7 @@ else
                  ls -1 --color=always "$dir" 2>/dev/null | head -30
                fi
              ' --preview-window=right:60%
-  ) || exit 0
+  ) || { tmux switch-client -t "${_orig_session}" 2>/dev/null; exit 0; }
 fi
 
 # --- resolve selection ---
