@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# tmux-layout-apply — Apply YAML layout to a tmux session
+# Usage: tmux-layout-apply <session_name> [working_dir]
+#
+# Looks for layouts/{session_name}.yml, falls back to layouts/default.yml.
+# Requires yq (mikefarah). Silently exits if yq is missing.
+
+set -euo pipefail
+
+LAYOUT_DIR="${HOME}/.tmux/layouts"
+session="${1:?Usage: tmux-layout-apply <session> [workdir]}"
+workdir="${2:-.}"
+
+# Require yq
+command -v yq &>/dev/null || exit 0
+
+# Find layout: project-specific → default → exit
+layout="${LAYOUT_DIR}/${session}.yml"
+[[ -f "$layout" ]] || layout="${LAYOUT_DIR}/default.yml"
+[[ -f "$layout" ]] || exit 0
+
+num_windows=$(yq '.windows | length' "$layout")
+[[ "$num_windows" -gt 0 ]] 2>/dev/null || exit 0
+
+for ((w = 0; w < num_windows; w++)); do
+  win_name=$(yq -r ".windows[$w].name" "$layout")
+  win_layout=$(yq -r ".windows[$w].layout // \"\"" "$layout")
+  num_panes=$(yq ".windows[$w].panes | length" "$layout")
+
+  if [[ $w -eq 0 ]]; then
+    # Rename the default window (created with session)
+    tmux rename-window -t "${session}:0" "$win_name"
+  else
+    # Create additional windows
+    tmux new-window -t "${session}" -n "$win_name" -c "$workdir"
+  fi
+
+  # Create additional panes (pane 0 already exists per window)
+  for ((p = 1; p < num_panes; p++)); do
+    tmux split-window -t "${session}:${win_name}" -c "$workdir"
+  done
+
+  # Apply layout geometry before sending commands
+  if [[ -n "$win_layout" ]]; then
+    tmux select-layout -t "${session}:${win_name}" "$win_layout" 2>/dev/null || true
+  fi
+
+  # Send startup commands to panes
+  for ((p = 0; p < num_panes; p++)); do
+    pane_cmd=$(yq -r ".windows[$w].panes[$p].command // \"\"" "$layout")
+    if [[ -n "$pane_cmd" ]]; then
+      tmux send-keys -t "${session}:${win_name}.${p}" "$pane_cmd" Enter
+    fi
+  done
+done
+
+# Focus first window, first pane
+tmux select-window -t "${session}:0"
+tmux select-pane -t "${session}:0.0"

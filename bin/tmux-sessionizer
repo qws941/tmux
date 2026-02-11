@@ -91,6 +91,8 @@ else
 
   if ! tmux has-session -t="${session_name}" 2>/dev/null; then
     tmux new-session -ds "${session_name}" -c "${selected}"
+    # Apply project layout (layouts/{name}.yml → default.yml fallback)
+    ~/.tmux/bin/tmux-layout-apply "${session_name}" "${selected}"
     # Auto-create sidebar in new session
     ~/.tmux/bin/tmux-sidebar-init "${session_name}" &
   fi
