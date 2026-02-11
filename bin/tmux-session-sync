@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+# tmux-session-sync — Auto-create sessions for ~/dev subdirectories
+# Usage: tmux-session-sync [--dry-run] [--clean]
+#   --dry-run  Show what would be done without doing it
+#   --clean    Remove sessions whose directories no longer exist
+set -uo pipefail
+
+TMUX_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+LAYOUT_DIR="$TMUX_DIR/layouts"
+SIDEBAR_INIT="$TMUX_DIR/bin/tmux-sidebar-init"
+
+# Source config for scan paths
+CONFIG_FILE="$TMUX_DIR/sessionizer.conf"
+SCAN_DIR="${HOME}/dev"
+EXTRA_DIRS=()
+[[ -f "$CONFIG_FILE" ]] && source "$CONFIG_FILE"
+
+# Parse args
+DRY_RUN=false
+CLEAN=false
+for arg in "$@"; do
+    case "$arg" in
+        --dry-run) DRY_RUN=true ;;
+        --clean)   CLEAN=true ;;
+    esac
+done
+
+# Colors
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+RED='\033[0;31m'
+DIM='\033[0;90m'
+NC='\033[0m'
+
+created=0
+skipped=0
+cleaned=0
+
+# ── Create sessions for each subdirectory ──
+for dir in "$SCAN_DIR"/*/; do
+    [[ ! -d "$dir" ]] && continue
+    name="$(basename "$dir")"
+
+    # Skip hidden dirs and common non-project dirs
+    [[ "$name" == .* ]] && continue
+    [[ "$name" == "data" || "$name" == "logs" ]] && continue
+
+    # Check if session already exists
+    if tmux has-session -t "=$name" 2>/dev/null; then
+        ((skipped++))
+        continue
+    fi
+
+    # Find matching layout
+    layout=""
+    if [[ -f "$LAYOUT_DIR/${name}.yml" ]]; then
+        layout="$LAYOUT_DIR/${name}.yml"
+    fi
+
+    if $DRY_RUN; then
+        echo -e "${GREEN}+${NC} $name ${DIM}($dir)${NC}${layout:+ ${YELLOW}← ${layout##*/}${NC}}"
+        ((created++))
+        continue
+    fi
+
+    # Create session
+    tmux new-session -d -s "$name" -c "$dir" 2>/dev/null || continue
+
+    # Apply layout if exists
+    if [[ -n "$layout" ]]; then
+        # Parse layout YAML and apply (simplified: run commands from layout)
+        while IFS= read -r cmd; do
+            [[ -z "$cmd" || "$cmd" == "#"* ]] && continue
+            eval "$cmd" 2>/dev/null || true
+        done < <(grep -E '^\s+- ' "$layout" 2>/dev/null | sed 's/^\s*- //')
+    fi
+
+    # Init sidebar
+    if [[ -x "$SIDEBAR_INIT" ]]; then
+        "$SIDEBAR_INIT" "$name" 2>/dev/null &
+    fi
+
+    echo -e "${GREEN}+${NC} $name${layout:+ ${DIM}(${layout##*/})${NC}}"
+    ((created++))
+done
+
+# ── Also handle EXTRA_DIRS ──
+for dir in "${EXTRA_DIRS[@]}"; do
+    [[ ! -d "$dir" ]] && continue
+    name="$(basename "$dir")"
+    if tmux has-session -t "=$name" 2>/dev/null; then
+        ((skipped++))
+        continue
+    fi
+    if $DRY_RUN; then
+        echo -e "${GREEN}+${NC} $name ${DIM}($dir)${NC}"
+        ((created++))
+        continue
+    fi
+    tmux new-session -d -s "$name" -c "$dir" 2>/dev/null || continue
+    [[ -x "$SIDEBAR_INIT" ]] && "$SIDEBAR_INIT" "$name" 2>/dev/null &
+    echo -e "${GREEN}+${NC} $name"
+    ((created++))
+done
+
+# ── Clean stale sessions ──
+if $CLEAN; then
+    while IFS= read -r session; do
+        [[ -z "$session" ]] && continue
+        # Skip OC sessions and special sessions
+        [[ "$session" == oc-* || "$session" == "main" ]] && continue
+
+        # Check if matching directory exists
+        dir_exists=false
+        [[ -d "$SCAN_DIR/$session" ]] && dir_exists=true
+        for d in "${EXTRA_DIRS[@]}"; do
+            [[ "$(basename "$d")" == "$session" && -d "$d" ]] && dir_exists=true
+        done
+
+        if ! $dir_exists; then
+            if $DRY_RUN; then
+                echo -e "${RED}-${NC} $session ${DIM}(dir missing)${NC}"
+            else
+                tmux kill-session -t "=$session" 2>/dev/null
+                echo -e "${RED}-${NC} $session"
+            fi
+            ((cleaned++))
+        fi
+    done < <(tmux list-sessions -F '#{session_name}' 2>/dev/null)
+fi
+
+# ── Summary ──
+prefix=""
+$DRY_RUN && prefix="${YELLOW}[dry-run]${NC} "
+echo -e "\n${prefix}${GREEN}${created}${NC} created, ${DIM}${skipped}${NC} skipped${CLEAN:+, ${RED}${cleaned}${NC} cleaned}"
