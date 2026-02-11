@@ -26,7 +26,7 @@ BIN_DIR="$OPENCODE_CONFIG_DIR/bin"
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
 
-declare -A PORTS=( [anti]=3001 [claude]=3002 [co]=3003 )
+declare -A PORTS=( [anti]=3011 [claude]=3012 [co]=3013 )
 declare -A XDG_PREFIX=( [anti]=opencode-wt-anti [claude]=opencode-wt-claude [co]=opencode-wt-copilot )
 ENVS=(anti claude co)
 
@@ -74,11 +74,11 @@ ensure_xdg_dirs() {
         cp "$src" "$dst"
     fi
 
-    # Sync opencode.jsonc (main config) if not present
+    # Always sync opencode.jsonc (main config) to keep it up-to-date
     local main_cfg="$OPENCODE_CONFIG_DIR/opencode.jsonc"
     local dst_main="$HOME/.config/$prefix/opencode.jsonc"
-    if [[ -f "$main_cfg" && ! -f "$dst_main" ]]; then
-        cp "$main_cfg" "$dst_main"
+    if [[ -f "$main_cfg" ]] && [[ "$(readlink -f "$main_cfg")" != "$(readlink -f "$dst_main" 2>/dev/null)" ]]; then
+        cp -u "$main_cfg" "$dst_main"
     fi
 }
 
@@ -99,10 +99,14 @@ cmd_start() {
     local env_vars
     env_vars=$(get_xdg_env "$env")
 
+    # Build command with env vars and proper NVM node path
+    local node_bin
+    node_bin="$(dirname "$(which node)" 2>/dev/null || echo "$HOME/.nvm/versions/node/v22.22.0/bin")"
+
     # Create tmux session with env vars
     tmux new-session -d -s "$session" \
         "$(echo "$env_vars" | tr '\n' ' ') \
-        PATH=\"$HOME/.nvm/versions/node/v22.22.0/bin:\$PATH\" \
+        PATH=\"$node_bin:\$PATH\" \
         $OPENCODE_BIN serve --port ${PORTS[$env]} --hostname 127.0.0.1; \
         echo 'Process exited. Press Enter to close.'; read"
 
@@ -217,9 +221,9 @@ usage() {
     echo "  switch  <co|claude|anti>      Switch config + restart"
     echo ""
     echo "Environments:"
-    echo "  co      GitHub Copilot    :3003"
-    echo "  claude  Direct Anthropic  :3002"
-    echo "  anti    Antigravity       :3001"
+    echo "  co      GitHub Copilot    :3013"
+    echo "  claude  Direct Anthropic  :3012"
+    echo "  anti    Antigravity       :3011"
 }
 
 validate_env() {
