@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# tmux-sessionizer — taskbar-style session switcher
+# tmux-sessionizer — taskbar-style session switcher + creation wizard
 # Usage: tmux-sessionizer [directory]
 
 set -euo pipefail
 
 export PATH="$HOME/.local/bin:$HOME/bin:$PATH"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LAYOUT_DIR="${SCRIPT_DIR}/../layouts"
 
 # Adaptive layout for narrow screens (Galaxy Fold ~60 cols)
 _term_width="${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}"
@@ -14,8 +17,16 @@ else
   _preview_pos="right:60%"
 fi
 
+# Common fzf colors (Tokyo Night)
+_fzf_colors="bg+:#292e42,fg:#a9b1d6,fg+:#c0caf5,hl:#bb9af7,hl+:#bb9af7,info:#7aa2f7,prompt:#7dcfff,pointer:#bb9af7,marker:#9ece6a,header:#565f89"
+
 SCAN_DIR="${HOME}/dev"
 EXTRA_DIRS=("${HOME}/.config/opencode")
+
+if [[ -f "${HOME}/.tmux/sessionizer.conf" ]]; then
+  # shellcheck source=/dev/null
+  source "${HOME}/.tmux/sessionizer.conf"
+fi
 
 for cmd in fzf tmux; do
   command -v "${cmd}" &>/dev/null || { echo "error: ${cmd} not found" >&2; exit 1; }
@@ -24,13 +35,139 @@ done
 # Save original session for cancel/restore
 _orig_session=$(tmux display-message -p '#{session_name}' 2>/dev/null || true)
 
-# --- pick target ---
+# ─── Session Creation Wizard ───────────────────────────────────────────
+create_session_wizard() {
+  local sel_dir sel_layout sel_name
+
+  # Step 1: Pick directory
+  local dirs=""
+  while IFS= read -r dir; do
+    dirs+="${dir}"$'\n'
+  done < <(find "${SCAN_DIR}" -mindepth 1 -maxdepth 1 -type d | sort)
+  for dir in "${EXTRA_DIRS[@]}"; do
+    [[ -d "$dir" ]] && dirs+="${dir}"$'\n'
+  done
+
+  sel_dir=$(
+    printf '%s' "${dirs}" \
+      | fzf --prompt="  1/3 directory > " \
+             --layout=reverse --border=none --no-separator \
+             --color="${_fzf_colors}" \
+             --header="1/3 directory │ ESC cancel" \
+             --preview='
+               echo -e "\033[1;34m📁 $(basename {})\033[0m"
+               echo -e "\033[90m$(printf "%.0s─" {1..40})\033[0m"
+               ls -1 --color=always {} 2>/dev/null | head -25
+             ' --preview-window="${_preview_pos}"
+  ) || return 1
+
+  local default_name
+  default_name=$(basename "${sel_dir}" | tr '.' '_')
+
+  # Step 2: Pick layout
+  local layouts=""
+  layouts+="(auto) auto-detect"$'\n'
+  while IFS= read -r yml; do
+    local lname
+    lname=$(basename "${yml}" .yml)
+    layouts+="${lname}"$'\n'
+  done < <(find "${LAYOUT_DIR}" -name '*.yml' 2>/dev/null | sort)
+
+  sel_layout=$(
+    printf '%s' "${layouts}" \
+      | fzf --prompt="  2/3 layout > " \
+             --layout=reverse --border=none --no-separator \
+             --color="${_fzf_colors}" \
+             --header="2/3 layout │ ESC back" \
+             --preview="
+               item={}
+               if [[ \"\$item\" == '(auto)'* ]]; then
+                 echo -e '\033[1;35m⚡ Auto-detect\033[0m'
+                 echo 'Matches layout by directory name, falls back to default.yml'
+                 echo ''
+                 match=\"${LAYOUT_DIR}/${default_name}.yml\"
+                 if [[ -f \"\$match\" ]]; then
+                   echo -e '\033[1;32m✓ Found: ${default_name}.yml\033[0m'
+                   echo -e '\033[90m$(printf '%.0s─' {1..40})\033[0m'
+                   cat \"\$match\"
+                 else
+                   echo -e '\033[1;33m○ No match → default.yml\033[0m'
+                   echo -e '\033[90m$(printf '%.0s─' {1..40})\033[0m'
+                   cat '${LAYOUT_DIR}/default.yml' 2>/dev/null || echo '(no default layout)'
+                 fi
+               else
+                 yml='${LAYOUT_DIR}/'\"\$item\".yml
+                 echo -e \"\033[1;35m📋 \$item\033[0m\"
+                 echo -e '\033[90m$(printf '%.0s─' {1..40})\033[0m'
+                 cat \"\$yml\" 2>/dev/null || echo '(file not found)'
+               fi
+             " --preview-window="${_preview_pos}"
+  ) || return 1
+  sel_layout="${sel_layout%% *}"  # strip description from (auto) line
+
+  # Step 3: Session name (editable, default = dir basename)
+  sel_name=$(
+    echo "${default_name}" \
+      | fzf --prompt="  3/3 name > " \
+             --layout=reverse --border=none --no-separator \
+             --color="${_fzf_colors}" \
+             --header="3/3 name │ ESC back" \
+             --print-query --select-1 \
+             --preview="
+               echo -e '\033[1;36m📌 Session Summary\033[0m'
+               echo -e '\033[90m$(printf '%.0s─' {1..40})\033[0m'
+               echo -e '\033[37m  Dir:    ${sel_dir}\033[0m'
+               echo -e '\033[37m  Layout: ${sel_layout}\033[0m'
+               echo -e '\033[37m  Name:   '\"{}\"\033[0m
+             " --preview-window="${_preview_pos}"
+  ) || return 1
+  # --print-query outputs query on first line, selected on second
+  sel_name=$(echo "${sel_name}" | head -1)
+  sel_name="${sel_name:-$default_name}"
+
+  # Check if session already exists
+  if tmux has-session -t="${sel_name}" 2>/dev/null; then
+    echo "Session '${sel_name}' already exists — switching." >&2
+    _do_switch "${sel_name}"
+    return 0
+  fi
+
+  # Create session
+  tmux new-session -ds "${sel_name}" -c "${sel_dir}"
+
+  # Apply layout
+  if [[ "${sel_layout}" == "(auto)" ]]; then
+    ~/.tmux/bin/tmux-layout-apply "${sel_name}" "${sel_dir}"
+  else
+    local yml_path="${LAYOUT_DIR}/${sel_layout}.yml"
+    if [[ -f "${yml_path}" ]]; then
+      ~/.tmux/bin/tmux-layout-apply "${sel_name}" "${sel_dir}" "${yml_path}"
+    fi
+  fi
+
+  # Sidebar init
+  ~/.tmux/bin/tmux-sidebar-init "${sel_name}" &
+
+  _do_switch "${sel_name}"
+}
+
+# ─── Switch helper ─────────────────────────────────────────────────────
+_do_switch() {
+  local target="$1"
+  if [[ -z "${TMUX:-}" ]]; then
+    exec tmux attach-session -t "${target}"
+  else
+    tmux switch-client -t "${target}"
+  fi
+}
+
+# ─── Main Picker ───────────────────────────────────────────────────────
 if [[ $# -eq 1 ]]; then
   selected="$1"
 else
-  # Build items: active sessions first, then ~/dev dirs (skip duplicates)
-  active_sessions=$(tmux list-sessions -F '#{session_name}' 2>/dev/null || true)
-  items=""
+  # Build items: create option + active sessions + ~/dev dirs
+  active_sessions=$(tmux list-sessions -F '#{session_last_attached} #{session_name}' 2>/dev/null | sort -rn | awk '{print $2}' || true)
+  items="➕ Create New Session"$'\n'
 
   # Active sessions (marked ●)
   while IFS= read -r s; do
@@ -59,48 +196,62 @@ else
     printf '%s' "${items}" \
       | fzf --prompt="  switch > " \
              --layout=reverse --border=none --no-separator \
-             --color=bg+:#292e42,fg:#a9b1d6,fg+:#c0caf5,hl:#bb9af7,hl+:#bb9af7,info:#7aa2f7,prompt:#7dcfff,pointer:#bb9af7,marker:#9ece6a,header:#565f89 \
-             --header="● active │ ↑↓ live switch │ ^R refresh │ ESC restore" \
+             --color="${_fzf_colors}" \
+             --header="● active │ ➕ create" \
              --bind 'ctrl-r:refresh-preview' \
              --bind "focus:execute-silent(echo {} | grep -q '^● ' && tmux switch-client -t \"\$(echo {} | sed 's/^● //')\" 2>/dev/null || true)" \
              --preview='
                item={}
-               if [[ "$item" == "● "* ]]; then
+               if [[ "$item" == "➕"* ]]; then
+                 echo -e "\033[1;35m➕ Create New Session\033[0m"
+                 echo -e "\033[90m$(printf "%.0s─" {1..40})\033[0m"
+                 echo -e "\033[37mStep 1: Pick directory\033[0m"
+                 echo -e "\033[37mStep 2: Pick layout\033[0m"
+                 echo -e "\033[37mStep 3: Name session\033[0m"
+                 echo ""
+                 echo -e "\033[90mPress ENTER to start wizard\033[0m"
+               elif [[ "$item" == "● "* ]]; then
                  name="${item#● }"
                  wins=$(tmux list-windows -t "$name" -F "#{window_name}" 2>/dev/null | paste -sd ", " -)
                  created=$(tmux display-message -t "$name" -p "#{t:session_created}" 2>/dev/null)
                  echo -e "\033[1;32m● ${name}\033[0m  \033[90m[${wins}]  ${created}\033[0m"
                  echo -e "\033[90m$(printf "%.0s─" {1..50})\033[0m"
-                 tmux capture-pane -t "$name" -p -e 2>/dev/null || echo -e "\033[90m(no active pane)\033[0m"
+                 mapfile -t panes < <(tmux list-panes -t "$name" -F "#{pane_index} #{pane_active}" 2>/dev/null)
+                 if [[ "${#panes[@]}" -le 1 ]]; then
+                   tmux capture-pane -t "$name" -p -e 2>/dev/null || echo -e "\033[90m(no active pane)\033[0m"
+                 else
+                   window=$(tmux display-message -t "$name" -p "#{window_index}" 2>/dev/null || echo 0)
+                   for pane_row in "${panes[@]}"; do
+                     pane="${pane_row%% *}"
+                     [[ -z "$pane" ]] && continue
+                     echo -e "\033[38;2;86;95;137m─── pane ${pane} ───\033[0m"
+                     tmux capture-pane -t "$name:${window}.${pane}" -p -e 2>/dev/null | tail -15
+                   done
+                 fi
                else
                  dir="${item#  }"
                  echo -e "\033[1;33m○ new session\033[0m  ($(basename "$dir" | tr "." "_"))"
                  echo -e "\033[90m$(printf "%.0s─" {1..50})\033[0m"
                  ls -1 --color=always "$dir" 2>/dev/null | head -30
                fi
-             ' --preview-window="$_preview_pos"
+             ' --preview-window="${_preview_pos}"
   ) || { tmux switch-client -t "${_orig_session}" 2>/dev/null; exit 0; }
 fi
 
-# --- resolve selection ---
-if [[ "${selected}" == "● "* ]]; then
+# ─── Handle selection ──────────────────────────────────────────────────
+if [[ "${selected}" == "➕"* ]]; then
+  create_session_wizard || { tmux switch-client -t "${_orig_session}" 2>/dev/null; exit 0; }
+elif [[ "${selected}" == "● "* ]]; then
   session_name="${selected#● }"
+  _do_switch "${session_name}"
 else
   selected="${selected#  }"  # strip leading spaces
   session_name=$(basename "${selected}" | tr '.' '_')
 
   if ! tmux has-session -t="${session_name}" 2>/dev/null; then
     tmux new-session -ds "${session_name}" -c "${selected}"
-    # Apply project layout (layouts/{name}.yml → default.yml fallback)
     ~/.tmux/bin/tmux-layout-apply "${session_name}" "${selected}"
-    # Auto-create sidebar in new session
     ~/.tmux/bin/tmux-sidebar-init "${session_name}" &
   fi
-fi
-
-# --- switch ---
-if [[ -z "${TMUX:-}" ]]; then
-  exec tmux attach-session -t "${session_name}"
-else
-  tmux switch-client -t "${session_name}"
+  _do_switch "${session_name}"
 fi
