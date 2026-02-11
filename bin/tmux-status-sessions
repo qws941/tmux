@@ -16,9 +16,9 @@ while IFS= read -r line; do
 
   # Wrap each tab in range=session|$ID for click-to-switch
   if [[ "$session" == "$current" ]]; then
-    out+="#[range=session|${sid}]#[fg=#1f2335,bg=#3d59a1,bold] * ${session} ${wins}w #[norange]#[default]"
+    out+="#[range=session|${sid}]#[fg=#1a1b26,bg=#3d59a1,bold] * ${session} ${wins}w #[norange]#[default]"
   else
-    out+="#[range=session|${sid}]#[fg=#a9b1d6,bg=#1f2335] ${session} #[fg=#3b4261]${wins}w #[norange]#[default]"
+    out+="#[range=session|${sid}]#[fg=#a9b1d6,bg=#1a1b26] ${session} #[fg=#3b4261]${wins}w #[norange]#[default]"
   fi
 done < <(tmux list-sessions -F '#{session_id}:#{session_name}:#{session_windows}' 2>/dev/null)
 

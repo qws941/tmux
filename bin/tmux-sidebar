@@ -10,16 +10,16 @@ set -euo pipefail
 
 # Tokyo Night ANSI colors
 readonly C_RESET='\033[0m'
-readonly C_BG='\033[48;2;31;35;53m'       # #1f2335 storm bg
+readonly C_BG='\033[48;2;26;27;38m'       # #1a1b26 night bg
 readonly C_FG='\033[38;2;169;177;214m'     # #a9b1d6
-readonly C_ACCENT='\033[38;2;61;89;161m'   # #3d59a1 storm accent
+readonly C_ACCENT='\033[38;2;61;89;161m'   # #3d59a1 accent
 readonly C_ACTIVE='\033[1;38;2;192;202;245m' # #c0caf5 bright fg (bold)
-readonly C_ACTIVE_BG='\033[48;2;41;46;66m'   # #292e42 storm visual bg (visible stripe)
-readonly C_DIM='\033[38;2;59;66;97m'       # #3b4261 storm dim
-readonly C_IDLE='\033[38;2;42;48;73m'      # #2a3049 storm idle
-readonly C_GREEN='\033[38;2;115;218;202m'  # #73daca storm teal
-readonly C_PURPLE='\033[38;2;157;124;216m' # #9d7cd8 storm purple
-readonly C_BORDER='\033[38;2;42;48;73m'    # #2a3049 storm border
+readonly C_ACTIVE_BG='\033[48;2;41;46;66m'   # #292e42 visual bg (visible stripe)
+readonly C_DIM='\033[38;2;59;66;97m'       # #3b4261 dim
+readonly C_IDLE='\033[38;2;34;36;54m'      # #222436 night idle
+readonly C_GREEN='\033[38;2;115;218;202m'  # #73daca teal
+readonly C_PURPLE='\033[38;2;157;124;216m' # #9d7cd8 purple
+readonly C_BORDER='\033[38;2;34;36;54m'    # #222436 night border
 readonly C_CYAN='\033[38;2;125;207;255m'   # #7dcfff
 readonly C_YELLOW='\033[38;2;224;175;104m' # #e0af68
 
