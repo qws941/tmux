@@ -1,2 +1,1 @@
-#!/bin/bash
-OCENV_NAME="$(basename "$0")" exec "$(dirname "$0")/ocenv" "$@"
+ocenv
