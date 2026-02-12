@@ -1,0 +1,13 @@
+windows:
+  - name: editor
+    layout: main-vertical
+    panes:
+      - name: nvim
+        command: nvim
+      - name: term
+        command: git status
+  - name: server
+    layout: tiled
+    panes:
+      - name: process
+        command: # npm run dev
