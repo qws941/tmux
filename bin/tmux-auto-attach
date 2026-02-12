@@ -18,5 +18,5 @@ if tmux attach 2>/dev/null; then
     exit 0
 fi
 
-# No session exists — launch sessionizer to pick/create session
-exec ~/.tmux/bin/tmux-sessionizer
+# No session exists — create default 'main' session immediately (skip picker)
+tmux new-session -s main
