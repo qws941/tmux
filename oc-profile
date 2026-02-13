@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # oc-profile — OpenCode oh-my-opencode.json profile switcher
-# Usage: co | google | gemini  (symlinks to this script)
+# Usage: copilot | google | gemini  (symlinks to this script)
 
 SELF="$(basename "$0")"
 OC_DIR="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
@@ -10,12 +10,12 @@ TARGET="$OC_DIR/oh-my-opencode.json"
 
 # Map script name → profile variant
 case "$SELF" in
-  co)      PROFILE="copilot" ;;
+  copilot) PROFILE="copilot" ;;
   google)  PROFILE="google"  ;;
   gemini)  PROFILE="gemini"  ;;
   *)
-    echo "Usage: co | google | gemini" >&2
-    echo "  co     → switch to Copilot profile" >&2
+    echo "Usage: copilot | google | gemini" >&2
+    echo "  copilot → switch to Copilot profile" >&2
     echo "  google → switch to Google profile" >&2
     echo "  gemini → switch to Gemini profile" >&2
     exit 1
