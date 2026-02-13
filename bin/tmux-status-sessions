@@ -1,25 +1,41 @@
 #!/usr/bin/env bash
 # tmux-status-sessions — render clickable session tabs for status bar
-# Click a session tab → switch directly to that session
-# Uses tmux format ranges: range=session|$ID triggers Status mouse key
-# Current session: inverted (dark text on blue), others: subtle
+# opencode is ALWAYS pinned first with home icon (⌂)
+# Other sessions follow in alphabetical order
+# Current session: inverted highlight, others: subtle
 
 current=$(tmux display-message -p '#S')
 
 out=""
+opencode_tab=""
+
 while IFS= read -r line; do
   [[ -z "$line" ]] && continue
-  sid="${line%%:*}"        # e.g. $1
+  sid="${line%%:*}"
   rest="${line#*:}"
-  session="${rest%%:*}"    # e.g. blacklist
-  wins="${rest#*:}"        # e.g. 1
+  session="${rest%%:*}"
+  wins="${rest#*:}"
 
-  # Wrap each tab in range=session|$ID for click-to-switch
-  if [[ "$session" == "$current" ]]; then
-    out+="#[range=session|${sid}]#[fg=#1a1b26,bg=#3d59a1,bold] * ${session} ${wins}w #[norange]#[default]"
-  else
-    out+="#[range=session|${sid}]#[fg=#a9b1d6,bg=#1a1b26] ${session} #[fg=#3b4261]${wins}w #[norange]#[default]"
+  if [[ "$session" == "opencode" ]]; then
+    # Pinned opencode tab — home icon, accent color
+    if [[ "$session" == "$current" ]]; then
+      opencode_tab="#[range=session|${sid}]#[fg=#1a1b26,bg=#7aa2f7,bold] ⌂ ${session} #[norange]#[default]"
+    else
+      opencode_tab="#[range=session|${sid}]#[fg=#7aa2f7,bg=#24283b] ⌂ ${session} #[norange]#[default]"
+    fi
+    continue
   fi
-done < <(tmux list-sessions -F '#{session_id}:#{session_name}:#{session_windows}' 2>/dev/null)
 
-printf '%s' "$out"
+  if [[ "$session" == "$current" ]]; then
+    out+="#[range=session|${sid}]#[fg=#1a1b26,bg=#3d59a1,bold] ${session} #[norange]#[default]"
+  else
+    out+="#[range=session|${sid}]#[fg=#a9b1d6,bg=#1a1b26] ${session} #[norange]#[default]"
+  fi
+done < <(tmux list-sessions -F '#{session_id}:#{session_name}:#{session_windows}' 2>/dev/null | sort -t: -k2)
+
+# opencode always first, then separator, then rest
+if [[ -n "$opencode_tab" ]]; then
+  printf '%s' "${opencode_tab}#[fg=#3b4261]│#[default]${out}"
+else
+  printf '%s' "$out"
+fi
