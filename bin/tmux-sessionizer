@@ -62,7 +62,7 @@ create_session_wizard() {
   ) || return 1
 
   local default_name
-  default_name=$(basename "${sel_dir}" | tr '.' '_')
+  default_name=$(basename "${sel_dir}" | tr ' .:' '_')
 
   # Step 2: Pick layout
   local layouts=""
@@ -177,7 +177,7 @@ else
 
   # ~/dev directories (skip if session already exists)
   while IFS= read -r dir; do
-    name=$(basename "$dir" | tr '.' '_')
+    name=$(basename "$dir" | tr ' .:' '_')
     if ! echo "${active_sessions}" | grep -qx "${name}"; then
       items+="  ${dir}"$'\n'
     fi
@@ -186,7 +186,7 @@ else
   # Extra directories (e.g. ~/.config/opencode)
   for dir in "${EXTRA_DIRS[@]}"; do
     [[ -d "$dir" ]] || continue
-    name=$(basename "$dir" | tr '.' '_')
+    name=$(basename "$dir" | tr ' .:' '_')
     if ! echo "${active_sessions}" | grep -qx "${name}"; then
       items+="  ${dir}"$'\n'
     fi
@@ -247,7 +247,7 @@ else
                    done
                 else
                   dir="${item#  }"
-                  echo -e "\033[1;33m○ new session\033[0m  ($(basename "$dir" | tr "." "_"))"
+                  echo -e "\033[1;33m○ new session\033[0m  ($(basename "$dir" | tr " .:" "_"))"
                   ls -1 --color=always "$dir" 2>/dev/null | head -30
                 fi
               ' --preview-window="${_preview_pos}"
@@ -262,7 +262,7 @@ elif [[ "${selected}" == "● "* ]]; then
   _do_switch "${session_name}"
 else
   selected="${selected#  }"  # strip leading spaces
-  session_name=$(basename "${selected}" | tr '.' '_')
+  session_name=$(basename "${selected}" | tr ' .:' '_')
 
   if ! tmux has-session -t="${session_name}" 2>/dev/null; then
     tmux new-session -ds "${session_name}" -c "${selected}"
