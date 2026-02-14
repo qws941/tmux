@@ -1,15 +1,13 @@
 #!/usr/bin/env bash
-# tmux-session-cycle — cycle through sessions, skipping "opencode"
-# opencode has a dedicated HOME key — no need in rotation
+# tmux-session-cycle — cycle through sessions with wrap-around
 # Usage: tmux-session-cycle next|prev
 
 direction="${1:-next}"
 current=$(tmux display-message -p '#S')
 
-# Build session list, excluding opencode
+# Build sorted session list
 sessions=()
 while IFS= read -r name; do
-  [[ "$name" == "opencode" ]] && continue
   sessions+=("$name")
 done < <(tmux list-sessions -F '#{session_name}' 2>/dev/null | sort)
 
@@ -24,7 +22,7 @@ for i in "${!sessions[@]}"; do
   fi
 done
 
-# If current is opencode or not found, jump to first
+# If not found, jump to first
 if (( idx < 0 )); then
   tmux switch-client -t "${sessions[0]}"
   exit 0

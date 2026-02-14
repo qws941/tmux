@@ -21,7 +21,7 @@ fi
 _fzf_colors="bg+:#292e42,fg:#a9b1d6,fg+:#c0caf5,hl:#bb9af7,hl+:#bb9af7,info:#7aa2f7,prompt:#7dcfff,pointer:#bb9af7,marker:#9ece6a,header:#565f89"
 
 SCAN_DIR="${HOME}/dev"
-EXTRA_DIRS=("${HOME}/.config/opencode")
+EXTRA_DIRS=()
 
 if [[ -f "${HOME}/.tmux/sessionizer.conf" ]]; then
   # shellcheck source=/dev/null
@@ -183,7 +183,7 @@ else
     fi
   done < <(find "${SCAN_DIR}" -mindepth 1 -maxdepth 1 -type d | sort)
 
-  # Extra directories (e.g. ~/.config/opencode)
+  # Extra directories from config
   for dir in "${EXTRA_DIRS[@]}"; do
     [[ -d "$dir" ]] || continue
     name=$(basename "$dir" | tr ' .:' '_')
