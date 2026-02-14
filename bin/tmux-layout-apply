@@ -23,7 +23,10 @@ if [[ "$current_windows" -gt 1 ]]; then
 fi
 
 # Require yq
-command -v yq &>/dev/null || exit 0
+if ! command -v yq &>/dev/null; then
+  tmux display-message "tmux-layout-apply: yq not found — install with: brew install yq" 2>/dev/null
+  exit 0
+fi
 
 # Find layout: explicit → project-specific → default → exit
 if [[ -n "$explicit_layout" && -f "$explicit_layout" ]]; then
