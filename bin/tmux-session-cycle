@@ -5,9 +5,11 @@
 direction="${1:-next}"
 current=$(tmux display-message -p '#S')
 
-# Build sorted session list
+# Build sorted session list (exclude Home-only sessions)
+EXCLUDE="opencode"
 sessions=()
 while IFS= read -r name; do
+  [[ "$name" == "$EXCLUDE" ]] && continue
   sessions+=("$name")
 done < <(tmux list-sessions -F '#{session_name}' 2>/dev/null | sort)
 
@@ -22,7 +24,7 @@ for i in "${!sessions[@]}"; do
   fi
 done
 
-# If not found, jump to first
+# If current session is excluded or not found, jump to first
 if (( idx < 0 )); then
   tmux switch-client -t "${sessions[0]}"
   exit 0
