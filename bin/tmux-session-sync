@@ -107,8 +107,8 @@ done
 if $CLEAN; then
     while IFS= read -r session; do
         [[ -z "$session" ]] && continue
-        # Skip OC sessions and special sessions
-        [[ "$session" == oc-* || "$session" == "main" ]] && continue
+        # Skip special sessions
+        [[ "$session" == "main" ]] && continue
 
         # Check if matching directory exists
         dir_exists=false
